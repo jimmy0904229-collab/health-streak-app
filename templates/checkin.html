@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>運動打卡</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script>
+        function previewImage(event) {
+            const reader = new FileReader();
+            reader.onload = function(){
+                const output = document.getElementById('img-preview');
+                output.src = reader.result;
+                output.style.display = 'block';
+            };
+            reader.readAsDataURL(event.target.files[0]);
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h2>運動打卡</h2>
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            <div class="flash">{{ messages[0] }}</div>
+          {% endif %}
+        {% endwith %}
+        {% if success %}
+            <div class="success">
+                <p>打卡成功！</p>
+                <p>運動名稱：{{ sport_name }}</p>
+                <p>運動時間：{{ sport_time }} 分鐘</p>
+                <a href="{{ url_for('index') }}" class="btn">回首頁</a>
+            </div>
+        {% else %}
+        <form method="POST" enctype="multipart/form-data" class="form-card">
+            <label>運動名稱：</label>
+            <input type="text" name="sport_name" required>
+            <label>運動時間（分鐘）：</label>
+            <input type="number" name="sport_time" min="1" required>
+            <label>上傳照片：</label>
+            <input type="file" accept="image/*" onchange="previewImage(event)">
+            <img id="img-preview" style="display:none;max-width:200px;margin-top:10px;">
+            <button type="submit" class="btn">提交打卡</button>
+        </form>
+        {% endif %}
+    </div>
+</body>
+</html>

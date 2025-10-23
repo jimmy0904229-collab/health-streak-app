@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>運動打卡 App - 首頁</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>運動打卡 App</h1>
+        <div class="status-card">
+            <p>今日是否達標：
+                {% if status.today_goal %}
+                    <span class="check">✅</span>
+                {% else %}
+                    <span class="cross">❌</span>
+                {% endif %}
+            </p>
+            <p>目前連勝天數：<span class="streak">{{ status.streak_days }}</span> 天</p>
+        </div>
+        <div class="btn-group">
+            <a href="{{ url_for('checkin') }}" class="btn">打卡頁面</a>
+            <a href="{{ url_for('leaderboard_page') }}" class="btn">排行榜</a>
+            <a href="{{ url_for('stats') }}" class="btn">數據視覺化</a>
+        </div>
+    </div>
+</body>
+</html>

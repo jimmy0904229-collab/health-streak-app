@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>數據視覺化</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h2>最近 7 天運動時長</h2>
+        <canvas id="myChart" width="400" height="200"></canvas>
+        <button class="btn" onclick="showRecords()">顯示最近 7 天的運動紀錄</button>
+        <div id="records" style="display:none;">
+            <ul>
+                {% for day in recent_7_days %}
+                <li>{{ day.date }}：{{ day.minutes }} 分鐘</li>
+                {% endfor %}
+            </ul>
+        </div>
+        <a href="{{ url_for('index') }}" class="btn">回首頁</a>
+    </div>
+    <script>
+        // Jinja2 變數需用 JSON.stringify 包裝
+        const labels = JSON.parse('{{ recent_7_days | map(attribute="date") | list | tojson | safe }}');
+        const data = JSON.parse('{{ recent_7_days | map(attribute="minutes") | list | tojson | safe }}');
+        const ctx = document.getElementById('myChart').getContext('2d');
+        const myChart = new Chart(ctx, {
+            type: 'bar', // 可改 'line'
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: '運動時長（分鐘）',
+                    data: data,
+                    backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+
+        function showRecords() {
+            document.getElementById('records').style.display = 'block';
+        }
+    </script>
+</body>
+</html>

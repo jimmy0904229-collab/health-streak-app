@@ -1,0 +1,103 @@
+body {
+    background: #f5f7fa;
+    font-family: 'Segoe UI', '微軟正黑體', Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+}
+.container {
+    max-width: 480px;
+    margin: 40px auto;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    padding: 32px 24px;
+}
+h1, h2, h3 {
+    color: #2d5be3;
+    text-align: center;
+    margin-bottom: 24px;
+}
+.status-card, .form-card, .success {
+    background: #eaf1fb;
+    border-radius: 8px;
+    padding: 18px 16px;
+    margin-bottom: 24px;
+    text-align: center;
+}
+.check { color: #2ecc40; font-size: 1.5em; }
+.cross { color: #e74c3c; font-size: 1.5em; }
+.streak { font-weight: bold; color: #e67e22; }
+.btn-group { display: flex; justify-content: space-between; margin-top: 24px; }
+.btn {
+    background: #2d5be3;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 18px;
+    text-decoration: none;
+    font-size: 1em;
+    margin: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+    display: inline-block;
+}
+.btn:hover { background: #1a3e8a; }
+.leaderboard-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 18px;
+}
+.leaderboard-table th, .leaderboard-table td {
+    border: 1px solid #dbeafe;
+    padding: 8px;
+    text-align: center;
+}
+.leaderboard-table th {
+    background: #eaf1fb;
+    color: #2d5be3;
+}
+.badge-section ul {
+    list-style: none;
+    padding: 0;
+}
+.badge {
+    background: #f9fafb;
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.badge.achieved {
+    background: #ffeaa7;
+    color: #2d5be3;
+    font-weight: bold;
+}
+.badge-icon {
+    margin-left: 8px;
+    font-size: 1.2em;
+}
+.flash {
+    background: #dff9fb;
+    color: #2d5be3;
+    border-radius: 6px;
+    padding: 10px;
+    margin-bottom: 16px;
+    text-align: center;
+}
+input[type="text"], input[type="number"], input[type="file"] {
+    width: 100%;
+    padding: 8px;
+    margin: 8px 0 16px 0;
+    border: 1px solid #dbeafe;
+    border-radius: 4px;
+    font-size: 1em;
+}
+button[type="submit"] {
+    width: 100%;
+}
+.success {
+    color: #27ae60;
+    font-size: 1.1em;
+}
