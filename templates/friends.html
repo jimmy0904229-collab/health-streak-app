@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>好友</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h2>好友</h2>
+        <section class="friend-search">
+            <input id="friend-q" type="text" placeholder="搜尋使用者名稱..." class="input-small">
+            <button id="friend-search-btn" class="btn small">搜尋</button>
+            <div id="search-results"></div>
+        </section>
+
+        <section class="friend-list">
+            <h3>你的好友</h3>
+            <ul>
+                {% for f in friends %}
+                <li>{{ f }}</li>
+                {% endfor %}
+            </ul>
+        </section>
+
+        <section class="pending-invites">
+            <h3>待處理邀請</h3>
+            <ul id="invite-list">
+                {% for p in pending %}
+                <li data-invite-id="{{ p.id }}">來自 <strong>{{ p.from }}</strong> <small>{{ p.time }}</small>
+                    <button class="accept-invite btn small" data-invite-id="{{ p.id }}">同意</button>
+                </li>
+                {% else %}
+                <li>目前沒有邀請</li>
+                {% endfor %}
+            </ul>
+        </section>
+    </div>
+
+    <!-- Bottom nav -->
+    <div class="bottom-nav">
+        <a href="{{ url_for('index') }}" class="nav-item">首頁</a>
+        <a href="{{ url_for('leaderboard_page') }}" class="nav-item">排行榜</a>
+        <a href="{{ url_for('stats') }}" class="nav-item">分析</a>
+        <a href="{{ url_for('badges_page') }}" class="nav-item">徽章</a>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script>
+        document.getElementById('friend-search-btn').addEventListener('click', function(){
+            const q = document.getElementById('friend-q').value.trim();
+            const res = document.getElementById('search-results');
+            res.innerHTML = '搜尋中...';
+            fetch('/friends/search?q=' + encodeURIComponent(q))
+                .then(r=>r.json())
+                .then(data=>{
+                    if(!data || data.length===0) return res.innerHTML = '<p>找不到使用者</p>';
+                    res.innerHTML = '<ul>' + data.map(u=>`<li>${u} <button class="btn small">追蹤</button></li>`).join('') + '</ul>';
+                })
+                .catch(()=> res.innerHTML = '<p>搜尋失敗</p>');
+        });
+
+        document.addEventListener('click', function(e){
+            if(e.target.closest('.accept-invite')){
+                const id = e.target.dataset.inviteId;
+                const fd = new FormData(); fd.append('invite_id', id);
+                fetch('/friends/accept', {method:'POST', body:fd})
+                    .then(r=>r.json())
+                    .then(j=>{
+                        if(j.ok){
+                            // 移除該邀請元素
+                            const li = document.querySelector('li[data-invite-id="'+id+'"]');
+                            if(li) li.remove();
+                            alert('已成為好友: ' + j.friend);
+                        }
+                    });
+            }
+        });
+    </script>
+</body>
+</html>

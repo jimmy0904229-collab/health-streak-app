@@ -56,3 +56,6 @@ document.addEventListener('submit', function(e){
             }).catch(()=> alert('留言錯誤'));
     }
 });
+
+// Friend search/accept handled partially in friends.html; here we can add helper if needed later
+

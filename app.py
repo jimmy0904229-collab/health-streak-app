@@ -62,6 +62,15 @@ posts = [
 ]
 next_post_id = 3
 
+# 模擬使用者與好友/邀請系統（in-memory）
+all_users = ["小明", "小美", "阿強", "阿花", "志明", "小華", "Kevin", "Anna"]
+current_user = "你"
+friends = ["小明", "小美"]
+pending_invites = [
+    {"id": 1, "from": "阿強", "time": "2025-10-23 08:00"},
+    {"id": 2, "from": "志明", "time": "2025-10-22 18:30"}
+]
+
 @app.route('/')
 def index():
     # 顯示社群動態牆（貼文）
@@ -134,6 +143,42 @@ def leaderboard_page():
 @app.route('/stats')
 def stats():
     return render_template('stats.html', recent_7_days=recent_7_days)
+
+
+@app.route('/friends')
+def friends_page():
+    # 顯示好友頁：好友清單 + 待處理邀請
+    return render_template('friends.html', friends=friends, pending=pending_invites)
+
+
+@app.route('/friends/search')
+def friends_search():
+    q = request.args.get('q', '').strip()
+    if not q:
+        return jsonify([])
+    # 回傳模糊比對的使用者（不包含自己）
+    matches = [u for u in all_users if q in u and u != current_user]
+    return jsonify(matches)
+
+
+@app.route('/friends/accept', methods=['POST'])
+def friends_accept():
+    # 接受邀請（模擬）
+    try:
+        invite_id = int(request.form.get('invite_id', 0))
+    except Exception:
+        return jsonify({'ok': False}), 400
+    for inv in list(pending_invites):
+        if inv['id'] == invite_id:
+            friends.append(inv['from'])
+            pending_invites.remove(inv)
+            return jsonify({'ok': True, 'friend': inv['from']})
+    return jsonify({'ok': False}), 404
+
+
+@app.route('/badges')
+def badges_page():
+    return render_template('badges.html', badges=badges)
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

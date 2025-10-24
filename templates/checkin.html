@@ -24,7 +24,7 @@
             <div class="flash">{{ messages[0] }}</div>
           {% endif %}
         {% endwith %}
-        {% if success %}
+    {% if success %}
             <div class="success">
                 <p>打卡成功！</p>
                 <p>運動名稱：{{ sport_name }}</p>
@@ -43,6 +43,14 @@
             <button type="submit" class="btn">提交打卡</button>
         </form>
         {% endif %}
+    </div>
+
+    <!-- Bottom nav -->
+    <div class="bottom-nav">
+        <a href="{{ url_for('index') }}" class="nav-item">首頁</a>
+        <a href="{{ url_for('friends_page') }}" class="nav-item">好友</a>
+        <a href="{{ url_for('leaderboard_page') }}" class="nav-item">排行榜</a>
+        <a href="{{ url_for('badges_page') }}" class="nav-item">徽章</a>
     </div>
 </body>
 </html>
