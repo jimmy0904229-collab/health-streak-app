@@ -11,14 +11,16 @@
         <section class="friend-search">
             <input id="friend-q" type="text" placeholder="搜尋使用者名稱..." class="input-small">
             <button id="friend-search-btn" class="btn small">搜尋</button>
-            <div id="search-results"></div>
         </section>
+        <div id="search-results"></div>
 
         <section class="friend-list">
             <h3>你的好友</h3>
             <ul>
                 {% for f in friends %}
                 <li>{{ f }}</li>
+                {% else %}
+                <li>尚未有好友，試著搜尋加入好友！</li>
                 {% endfor %}
             </ul>
         </section>
@@ -27,8 +29,14 @@
             <h3>待處理邀請</h3>
             <ul id="invite-list">
                 {% for p in pending %}
-                <li data-invite-id="{{ p.id }}">來自 <strong>{{ p.from }}</strong> <small>{{ p.time }}</small>
-                    <button class="accept-invite btn small" data-invite-id="{{ p.id }}">同意</button>
+                <li data-invite-id="{{ p.id }}">
+                    <div>
+                        <strong>{{ p.from }}</strong>
+                        <div class="muted">{{ p.time }}</div>
+                    </div>
+                    <div>
+                        <button class="accept-invite btn small" data-invite-id="{{ p.id }}">同意</button>
+                    </div>
                 </li>
                 {% else %}
                 <li>目前沒有邀請</li>

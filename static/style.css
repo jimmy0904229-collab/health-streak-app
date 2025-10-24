@@ -138,3 +138,25 @@ button[type="submit"] {
 
 /* ensure container bottom padding so content not hidden by nav */
 .container { padding-bottom: 80px; }
+
+/* central checkin button in bottom nav */
+.bottom-nav .checkin-btn {
+    background: linear-gradient(135deg,#ff7a18,#af002d);
+    color: #fff;
+    padding: 10px 14px;
+    border-radius: 28px;
+    box-shadow: 0 6px 18px rgba(175,0,45,0.24);
+    transform: translateY(-18px);
+    font-weight: 700;
+}
+
+/* Friends page styles improvements */
+.friend-search { display:flex; gap:8px; align-items:center; margin-bottom:12px; }
+.friend-search .input-small { flex:1; }
+.friend-list ul { list-style:none; padding:0; display:flex; flex-wrap:wrap; gap:10px; }
+.friend-list li { background:#f7fbff; padding:10px 12px; border-radius:8px; border:1px solid #e6f0ff; }
+.pending-invites ul { list-style:none; padding:0; }
+.pending-invites li { display:flex; align-items:center; justify-content:space-between; padding:8px; border:1px dashed #eaf2ff; border-radius:8px; margin-bottom:8px; background:#fff; }
+.accept-invite { background:#2d5be3; color:#fff; border-radius:6px; }
+.search-result-item { padding:8px; border:1px solid #eef6ff; margin-bottom:6px; border-radius:6px; display:flex; justify-content:space-between; align-items:center; }
+.search-result-item button { background:#2d5be3; color:#fff; border-radius:6px; }
