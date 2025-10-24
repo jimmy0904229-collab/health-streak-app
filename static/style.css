@@ -101,3 +101,18 @@ button[type="submit"] {
     color: #27ae60;
     font-size: 1.1em;
 }
+
+/* Feed styles */
+.app-header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.header-actions { display:flex; gap:8px; }
+.feed { margin-top: 18px; }
+.post { border: 1px solid #eef6ff; padding: 12px; border-radius: 8px; margin-bottom: 12px; background: #fff; }
+.post-header { display:flex; justify-content:space-between; margin-bottom:8px; }
+.post-image { max-width:100%; border-radius:6px; margin-top:8px; }
+.post-actions { margin-top:8px; display:flex; gap:8px; }
+.small { padding:6px 10px; font-size:0.9em; }
+.comments { margin-top:10px; border-top:1px dashed #eef6ff; padding-top:8px; }
+.comment-list { list-style:none; padding:0; margin:0 0 8px 0; }
+.comment-list li { padding:6px 0; border-bottom:1px solid #f5f8ff; }
+.input-small { padding:6px; margin-right:6px; border:1px solid #e6f0ff; border-radius:4px; }
+.c-time { color:#999; font-size:0.8em; margin-left:6px; }

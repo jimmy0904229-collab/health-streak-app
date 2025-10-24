@@ -7,7 +7,15 @@
 </head>
 <body>
     <div class="container">
-        <h1>運動打卡 App</h1>
+        <header class="app-header">
+            <h1>運動打卡 社群牆</h1>
+            <div class="header-actions">
+                <a href="{{ url_for('checkin') }}" class="btn">新增打卡貼文</a>
+                <a href="{{ url_for('leaderboard_page') }}" class="btn">排行榜</a>
+                <a href="{{ url_for('stats') }}" class="btn">數據視覺化</a>
+            </div>
+        </header>
+
         <div class="status-card">
             <p>今日是否達標：
                 {% if status.today_goal %}
@@ -18,11 +26,42 @@
             </p>
             <p>目前連勝天數：<span class="streak">{{ status.streak_days }}</span> 天</p>
         </div>
-        <div class="btn-group">
-            <a href="{{ url_for('checkin') }}" class="btn">打卡頁面</a>
-            <a href="{{ url_for('leaderboard_page') }}" class="btn">排行榜</a>
-            <a href="{{ url_for('stats') }}" class="btn">數據視覺化</a>
-        </div>
+
+        <section class="feed">
+            {% for post in posts %}
+            <article class="post" data-post-id="{{ post.id }}">
+                <div class="post-header">
+                    <strong class="post-user">{{ post.user }}</strong>
+                    <span class="post-time">{{ post.created_at }}</span>
+                </div>
+                <div class="post-body">
+                    <p><strong>{{ post.sport }}</strong> • {{ post.minutes }} 分鐘</p>
+                    {% if post.image %}
+                        <img src="{{ post.image }}" class="post-image">
+                    {% endif %}
+                </div>
+                <div class="post-actions">
+                    <button class="like-btn btn small" data-post-id="{{ post.id }}">👍 <span class="like-count">{{ post.likes }}</span></button>
+                    <button class="comment-toggle btn small" data-post-id="{{ post.id }}">💬 留言 ({{ post.comments|length }})</button>
+                </div>
+                <div class="comments" id="comments-{{ post.id }}" style="display:none;">
+                    <ul class="comment-list">
+                        {% for c in post.comments %}
+                        <li><strong>{{ c.user }}</strong>: {{ c.text }} <span class="c-time">{{ c.time }}</span></li>
+                        {% endfor %}
+                    </ul>
+                    <form class="comment-form" data-post-id="{{ post.id }}">
+                        <input type="text" name="user" placeholder="你的名稱（選填）" class="input-small">
+                        <input type="text" name="text" placeholder="寫下你的留言..." required class="input-small">
+                        <button type="submit" class="btn small">送出</button>
+                    </form>
+                </div>
+            </article>
+            {% else %}
+            <p>目前還沒有貼文，快去新增你的第一篇打卡貼文！</p>
+            {% endfor %}
+        </section>
     </div>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>

@@ -38,7 +38,7 @@
             <label>運動時間（分鐘）：</label>
             <input type="number" name="sport_time" min="1" required>
             <label>上傳照片：</label>
-            <input type="file" accept="image/*" onchange="previewImage(event)">
+            <input type="file" name="photo" accept="image/*" onchange="previewImage(event)">
             <img id="img-preview" style="display:none;max-width:200px;margin-top:10px;">
             <button type="submit" class="btn">提交打卡</button>
         </form>
