@@ -95,11 +95,13 @@ def checkin():
                 image_data = ''
 
         # 建立貼文物件（模擬社群貼文）
+        message = request.form.get('message', '').strip()
         post = {
             'id': next_post_id,
             'user': '你',
             'sport': sport_name,
             'minutes': int(sport_time) if sport_time else 0,
+            'message': message,
             'image': image_data,
             'created_at': datetime.now().strftime('%Y-%m-%d %H:%M'),
             'likes': 0,

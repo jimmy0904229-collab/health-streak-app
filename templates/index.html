@@ -20,6 +20,9 @@
                 </div>
                 <div class="post-body">
                     <p><strong>{{ post.sport }}</strong> • {{ post.minutes }} 分鐘</p>
+                    {% if post.message %}
+                    <p class="post-message">{{ post.message }}</p>
+                    {% endif %}
                     {% if post.image %}
                         <img src="{{ post.image }}" class="post-image">
                     {% endif %}
