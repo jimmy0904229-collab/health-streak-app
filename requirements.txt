@@ -1,3 +1,4 @@
-Flask==2.3.4
+Flask==2.3.3
 Jinja2==3.1.2
-werkzeug==2.3.7
+# gunicorn is required by Render to run the app in production
+gunicorn==20.1.0
