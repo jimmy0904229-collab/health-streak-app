@@ -14,9 +14,9 @@
                 <th>好友名稱</th>
                 <th>累積點數</th>
             </tr>
-            {% for i, user in enumerate(leaderboard) %}
+            {% for user in leaderboard %}
             <tr>
-                <td>{{ i+1 }}</td>
+                <td>{{ loop.index }}</td>
                 <td>{{ user.name }}</td>
                 <td>{{ user.points }}</td>
             </tr>
@@ -43,6 +43,6 @@
         <a href="{{ url_for('leaderboard_page') }}" class="nav-item">排行榜</a>
         <a href="{{ url_for('badges_page') }}" class="nav-item">徽章</a>
     </div>
-    </div>
+    
 </body>
 </html>

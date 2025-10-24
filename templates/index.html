@@ -9,23 +9,7 @@
     <div class="container">
         <header class="app-header">
             <h1>運動打卡 社群牆</h1>
-            <div class="header-actions">
-                <a href="{{ url_for('checkin') }}" class="btn">新增打卡貼文</a>
-                <a href="{{ url_for('leaderboard_page') }}" class="btn">排行榜</a>
-                <a href="{{ url_for('stats') }}" class="btn">數據視覺化</a>
-            </div>
         </header>
-
-        <div class="status-card">
-            <p>今日是否達標：
-                {% if status.today_goal %}
-                    <span class="check">✅</span>
-                {% else %}
-                    <span class="cross">❌</span>
-                {% endif %}
-            </p>
-            <p>目前連勝天數：<span class="streak">{{ status.streak_days }}</span> 天</p>
-        </div>
 
         <section class="feed">
             {% for post in posts %}
