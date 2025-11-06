@@ -71,6 +71,13 @@ pending_invites = [
     {"id": 2, "from": "志明", "time": "2025-10-22 18:30"}
 ]
 
+# 個人設定 (in-memory)
+profile = {
+    'display_name': '你',
+    'streak_days': user_status.get('streak_days', 0),
+    'notify': True
+}
+
 @app.route('/')
 def index():
     # 顯示社群動態牆（貼文）
@@ -181,6 +188,28 @@ def friends_accept():
 @app.route('/badges')
 def badges_page():
     return render_template('badges.html', badges=badges)
+
+
+@app.route('/profile', methods=['GET', 'POST'])
+def profile_page():
+    global profile
+    if request.method == 'POST':
+        # update simple profile settings
+        display = request.form.get('display_name', '').strip()
+        notify = request.form.get('notify', 'off') == 'on'
+        if display:
+            profile['display_name'] = display
+        profile['notify'] = notify
+        # allow manual update of streak (for demo)
+        try:
+            sd = int(request.form.get('streak_days', profile.get('streak_days', 0)))
+            profile['streak_days'] = sd
+            user_status['streak_days'] = sd
+        except Exception:
+            pass
+        flash('個人設定已更新')
+        return redirect(url_for('profile_page'))
+    return render_template('profile.html', profile=profile)
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

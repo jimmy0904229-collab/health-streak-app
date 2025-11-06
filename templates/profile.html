@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>個人主頁</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h2>個人主頁</h2>
+        <div class="profile-card">
+            <p><strong>使用者：</strong> {{ profile.display_name }}</p>
+            <p><strong>連續運動天數：</strong> {{ profile.streak_days }} 天</p>
+        </div>
+
+        <div class="profile-settings">
+            <h3>個人設定</h3>
+            {% with messages = get_flashed_messages() %}
+              {% if messages %}
+                <div class="flash">{{ messages[0] }}</div>
+              {% endif %}
+            {% endwith %}
+            <form method="POST">
+                <label>顯示名稱：</label>
+                <input type="text" name="display_name" value="{{ profile.display_name }}">
+                <label>連續運動天數：</label>
+                <input type="number" name="streak_days" min="0" value="{{ profile.streak_days }}">
+                <label><input type="checkbox" name="notify" {% if profile.notify %}checked{% endif %}> 接收通知</label>
+                <button type="submit" class="btn">儲存設定</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Bottom nav -->
+    <div class="bottom-nav">
+        <a href="{{ url_for('index') }}" class="nav-item">首頁</a>
+        <a href="{{ url_for('friends_page') }}" class="nav-item">好友</a>
+        <a href="{{ url_for('checkin') }}" class="nav-item checkin-btn">打卡</a>
+        <a href="{{ url_for('leaderboard_page') }}" class="nav-item">排行榜</a>
+        <a href="{{ url_for('stats') }}" class="nav-item">分析</a>
+        <a href="{{ url_for('profile_page') }}" class="nav-item">個人</a>
+    </div>
+</body>
+</html>
