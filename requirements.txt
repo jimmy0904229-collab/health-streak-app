@@ -2,3 +2,5 @@ Flask==2.3.3
 Jinja2==3.1.2
 # gunicorn is required by Render to run the app in production
 gunicorn==20.1.0
+flask_sqlalchemy==3.0.5
+flask_login==0.6.2
