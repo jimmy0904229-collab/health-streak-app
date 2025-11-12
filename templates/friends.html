@@ -66,7 +66,7 @@
                 .then(r=>r.json())
                 .then(data=>{
                     if(!data || data.length===0) return res.innerHTML = '<p>找不到使用者</p>';
-                    res.innerHTML = '<ul>' + data.map(u=>`<li>${u} <button class="btn small">追蹤</button></li>`).join('') + '</ul>';
+                    res.innerHTML = '<ul>' + data.map(u=>`<li>${u} <button class="btn small invite-btn" data-username="${u}">邀請</button></li>`).join('') + '</ul>';
                 })
                 .catch(()=> res.innerHTML = '<p>搜尋失敗</p>');
         });
@@ -85,6 +85,16 @@
                             alert('已成為好友: ' + j.friend);
                         }
                     });
+            }
+            if(e.target.closest('.invite-btn')){
+                const username = e.target.dataset.username;
+                const fd = new FormData(); fd.append('username', username);
+                fetch('/friends/invite', {method:'POST', body:fd})
+                    .then(r=>r.json())
+                    .then(j=>{
+                        if(j.ok) alert('已發送邀請給 ' + username);
+                        else alert('邀請失敗');
+                    }).catch(()=> alert('邀請失敗'));
             }
         });
     </script>

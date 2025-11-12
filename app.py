@@ -167,11 +167,14 @@ class RecentActivity(db.Model):
 # 定義 Friend 和 PendingInvite 資料模型
 class Friend(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(80), nullable=False)
+    owner_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    friend_name = db.Column(db.String(80), nullable=False)
+    owner = db.relationship('User', backref=db.backref('friends', lazy=True))
 
 class PendingInvite(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     from_user = db.Column(db.String(80), nullable=False)
+    to_user = db.Column(db.String(80), nullable=False)
     time = db.Column(db.String(20), nullable=False)
 
 @login_manager.user_loader
@@ -226,8 +229,14 @@ def stats():
 
 @app.route('/friends')
 def friends_page():
-    friends = Friend.query.all()
-    pending_invites = PendingInvite.query.all()
+    # show friends for current user and invites addressed to current user
+    if current_user.is_authenticated:
+        friends_q = Friend.query.filter_by(owner_id=current_user.id).all()
+        friends = [f.friend_name for f in friends_q]
+        pending_invites = PendingInvite.query.filter_by(to_user=current_user.username).all()
+    else:
+        friends = []
+        pending_invites = []
     return render_template('friends.html', friends=friends, pending=pending_invites)
 
 
@@ -261,8 +270,10 @@ def friends_search():
     q = request.args.get('q', '').strip()
     if not q:
         return jsonify([])
-    matches = Friend.query.filter(Friend.name.contains(q)).all()
-    return jsonify([f.name for f in matches])
+    # Search users by username or display_name
+    users = User.query.filter((User.username.contains(q)) | (User.display_name.contains(q))).all()
+    # return list of usernames
+    return jsonify([u.username for u in users])
 
 
 @app.route('/friends/accept', methods=['POST'])
@@ -273,14 +284,51 @@ def friends_accept():
         return jsonify({'ok': False}), 400
 
     invite = PendingInvite.query.get(invite_id)
-    if invite:
-        new_friend = Friend(name=invite.from_user)
-        db.session.add(new_friend)
-        db.session.delete(invite)
-        db.session.commit()
-        return jsonify({'ok': True, 'friend': invite.from_user})
+    if invite and invite.to_user == current_user.username:
+        # create friend entries for both users (owner -> friend)
+        try:
+            f1 = Friend(owner_id=current_user.id, friend_name=invite.from_user)
+            # try to find the other user's id
+            other = User.query.filter_by(username=invite.from_user).first()
+            if other:
+                f2 = Friend(owner_id=other.id, friend_name=current_user.username)
+                db.session.add(f2)
+            db.session.add(f1)
+            db.session.delete(invite)
+            db.session.commit()
+            return jsonify({'ok': True, 'friend': invite.from_user})
+        except Exception:
+            db.session.rollback()
+            return jsonify({'ok': False}), 500
 
     return jsonify({'ok': False}), 404
+
+
+@app.route('/friends/invite', methods=['POST'])
+@login_required
+def friends_invite():
+    username = request.form.get('username', '').strip()
+    if not username:
+        return jsonify({'ok': False}), 400
+    # can't invite yourself
+    if username == current_user.username:
+        return jsonify({'ok': False, 'error': "不能邀請自己"}), 400
+    # check target exists
+    target = User.query.filter_by(username=username).first()
+    if not target:
+        return jsonify({'ok': False, 'error': "找不到使用者"}), 404
+    # check existing invite
+    existing = PendingInvite.query.filter_by(from_user=current_user.username, to_user=username).first()
+    if existing:
+        return jsonify({'ok': False, 'error': '已發送邀請'}), 400
+    # check already friends
+    already = Friend.query.filter_by(owner_id=current_user.id, friend_name=username).first()
+    if already:
+        return jsonify({'ok': False, 'error': '已是好友'}), 400
+    inv = PendingInvite(from_user=current_user.username, to_user=username, time=datetime.utcnow().strftime('%Y-%m-%d %H:%M'))
+    db.session.add(inv)
+    db.session.commit()
+    return jsonify({'ok': True})
 
 
 @app.route('/')
