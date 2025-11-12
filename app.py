@@ -10,6 +10,7 @@ import uuid
 from urllib.parse import urljoin
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required
+from flask_migrate import Migrate
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'  # 用於 flash 訊息
@@ -27,6 +28,8 @@ def allowed_file(filename):
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
+# Initialize Flask-Migrate
+migrate = Migrate(app, db)
 
 # --- Optional S3 upload support ---
 def s3_configured():
@@ -549,7 +552,12 @@ def logout():
 
 # 初始化資料庫（建立必要的資料表，暫不插入假資料）
 with app.app_context():
-    db.create_all()
+    # ensure DB tables exist for simple local runs; migrations should be used for schema changes
+    try:
+        db.create_all()
+    except Exception:
+        # if create_all fails, defer to migrations
+        pass
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
