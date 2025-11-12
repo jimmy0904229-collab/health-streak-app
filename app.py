@@ -3,6 +3,8 @@ from datetime import datetime
 import base64
 import io
 from werkzeug.utils import secure_filename
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask_login import current_user
 import os
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required
@@ -10,32 +12,14 @@ from flask_login import LoginManager, UserMixin, login_user, logout_user, login_
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'  # 用於 flash 訊息
 
-# 社群貼文（in-memory 假資料）
-posts = [
-    {
-        "id": 1,
-        "user": "小明",
-        "sport": "慢跑",
-        "minutes": 30,
-        "image": "",
-        "created_at": datetime.now().strftime('%Y-%m-%d %H:%M'),
-        "likes": 3,
-        "comments": [
-            {"user": "小美", "text": "太厲害了！", "time": "2025-10-23 09:10"}
-        ]
-    },
-    {
-        "id": 2,
-        "user": "阿花",
-        "sport": "瑜伽",
-        "minutes": 45,
-        "image": "",
-        "created_at": datetime.now().strftime('%Y-%m-%d %H:%M'),
-        "likes": 1,
-        "comments": []
-    }
-]
-next_post_id = 3
+# 上傳相關設定
+UPLOAD_FOLDER = 'static/uploads'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 # 資料庫設定
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
@@ -50,12 +34,30 @@ login_manager.init_app(app)
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    password = db.Column(db.String(120), nullable=False)
+    password = db.Column(db.String(200), nullable=False)
+    display_name = db.Column(db.String(120), nullable=True)
+    avatar = db.Column(db.String(300), nullable=True)
+    notify = db.Column(db.Boolean, default=True)
+    streak_days = db.Column(db.Integer, default=0)
 
 class Post(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    content = db.Column(db.Text, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    sport = db.Column(db.String(80), nullable=True)
+    minutes = db.Column(db.Integer, default=0)
+    message = db.Column(db.Text, nullable=True)
+    image = db.Column(db.String(300), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    likes = db.Column(db.Integer, default=0)
+    user = db.relationship('User', backref=db.backref('posts', lazy=True))
+
+class Comment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    post_id = db.Column(db.Integer, db.ForeignKey('post.id'), nullable=False)
+    user = db.Column(db.String(120), nullable=False)
+    text = db.Column(db.Text, nullable=False)
+    time = db.Column(db.DateTime, default=datetime.utcnow)
+    post = db.relationship('Post', backref=db.backref('comments', lazy=True))
 
 # 定義 Leaderboard 和 Badge 資料模型
 class Leaderboard(db.Model):
@@ -93,72 +95,33 @@ class PendingInvite(db.Model):
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
-
-@app.route('/')
-def index():
-    user_status = UserStatus.query.first()
-    return render_template('index.html', status=user_status, posts=posts)
-
-@app.route('/checkin', methods=['GET', 'POST'])
-def checkin():
-    global posts, next_post_id
-    if request.method == 'POST':
-        sport_name = request.form.get('sport_name')
-        sport_time = request.form.get('sport_time')
-        # 嘗試讀取上傳的照片並轉為 data URL 儲存在記憶體
-        image_data = ''
-        file = request.files.get('photo')
-        if file and file.filename:
-            try:
-                data = file.read()
-                encoded = base64.b64encode(data).decode('utf-8')
-                mimetype = file.mimetype or 'image/png'
-                image_data = f'data:{mimetype};base64,{encoded}'
-            except Exception:
-                image_data = ''
-
-        # 建立貼文物件（模擬社群貼文）
-        message = request.form.get('message', '').strip()
-        post = {
-            'id': next_post_id,
-            'user': '你',
-            'sport': sport_name,
-            'minutes': int(sport_time) if sport_time else 0,
-            'message': message,
-            'image': image_data,
-            'created_at': datetime.now().strftime('%Y-%m-%d %H:%M'),
-            'likes': 0,
-            'comments': []
-        }
-        posts.insert(0, post)  # 新貼文放最前面
-        next_post_id += 1
-        flash('打卡成功！已發佈為貼文')
-        return redirect(url_for('index'))
-    return render_template('checkin.html', success=False)
+ 
 
 
 @app.route('/like', methods=['POST'])
 def like_post():
     post_id = int(request.form.get('post_id', 0))
-    for p in posts:
-        if p['id'] == post_id:
-            p['likes'] += 1
-            return jsonify({'ok': True, 'likes': p['likes']})
+    p = Post.query.get(post_id)
+    if p:
+        p.likes = (p.likes or 0) + 1
+        db.session.commit()
+        return jsonify({'ok': True, 'likes': p.likes})
     return jsonify({'ok': False}), 404
 
 
 @app.route('/comment', methods=['POST'])
 def comment_post():
     post_id = int(request.form.get('post_id', 0))
-    user = request.form.get('user', '訪客')
+    user = request.form.get('user') or (current_user.display_name or current_user.username)
     text = request.form.get('text', '').strip()
     if not text:
         return jsonify({'ok': False, 'error': 'empty'}), 400
-    for p in posts:
-        if p['id'] == post_id:
-            comment = {'user': user, 'text': text, 'time': datetime.now().strftime('%Y-%m-%d %H:%M')}
-            p['comments'].append(comment)
-            return jsonify({'ok': True, 'comment': comment})
+    p = Post.query.get(post_id)
+    if p:
+        comment = Comment(post_id=p.id, user=user, text=text)
+        db.session.add(comment)
+        db.session.commit()
+        return jsonify({'ok': True, 'comment': {'user': comment.user, 'text': comment.text, 'time': comment.time.strftime('%Y-%m-%d %H:%M')}})
     return jsonify({'ok': False}), 404
 
 @app.route('/leaderboard')
@@ -207,30 +170,58 @@ def friends_accept():
     return jsonify({'ok': False}), 404
 
 
-@app.route('/badges')
-def badges_page():
-    badges = Badge.query.all()
-    return render_template('badges.html', badges=badges)
+@app.route('/')
+@login_required
+def index():
+    # 以資料庫的貼文為主（沒有假資料）
+    posts_q = Post.query.order_by(Post.created_at.desc()).all()
+    posts = []
+    for p in posts_q:
+        posts.append({
+            'id': p.id,
+            'user': p.user.display_name or p.user.username,
+            'sport': p.sport,
+            'minutes': p.minutes,
+            'message': p.message,
+            'image': p.image,
+            'created_at': p.created_at.strftime('%Y-%m-%d %H:%M'),
+            'likes': p.likes,
+            'comments': [{'user': c.user, 'text': c.text, 'time': c.time.strftime('%Y-%m-%d %H:%M')} for c in p.comments]
+        })
+    # 傳遞目前使用者狀態給模板
+    return render_template('index.html', status=current_user, posts=posts)
 
 
 @app.route('/profile', methods=['GET', 'POST'])
+@login_required
 def profile_page():
+    # 顯示與更新目前使用者的個人設定
     if request.method == 'POST':
-        # 更新 streak_days
+        display = request.form.get('display_name', '').strip()
+        notify = request.form.get('notify', 'off') == 'on'
         try:
-            streak_days = int(request.form.get('streak_days', 0))
-            user_status = UserStatus.query.first()
-            if user_status:
-                user_status.streak_days = streak_days
-                db.session.commit()
-        except ValueError:
-            pass
+            sd = int(request.form.get('streak_days', current_user.streak_days or 0))
+        except Exception:
+            sd = current_user.streak_days or 0
 
+        if display:
+            current_user.display_name = display
+        current_user.notify = notify
+        current_user.streak_days = sd
+
+        # 處理上傳大頭貼
+        file = request.files.get('avatar')
+        if file and file.filename and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(filepath)
+            current_user.avatar = url_for('static', filename=f'uploads/{filename}')
+
+        db.session.commit()
         flash('個人設定已更新')
         return redirect(url_for('profile_page'))
 
-    user_status = UserStatus.query.first()
-    return render_template('profile.html', profile=user_status)
+    return render_template('profile.html', profile=current_user)
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -238,7 +229,8 @@ def register():
         username = request.form.get('username')
         password = request.form.get('password')
         if username and password:
-            new_user = User(username=username, password=password)
+            hashed = generate_password_hash(password)
+            new_user = User(username=username, password=hashed, display_name=username)
             db.session.add(new_user)
             db.session.commit()
             flash('註冊成功！請登入')
@@ -250,8 +242,8 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        user = User.query.filter_by(username=username, password=password).first()
-        if user:
+        user = User.query.filter_by(username=username).first()
+        if user and check_password_hash(user.password, password):
             login_user(user)
             flash('登入成功！')
             return redirect(url_for('index'))
@@ -265,68 +257,9 @@ def logout():
     flash('已登出')
     return redirect(url_for('login'))
 
-# 初始化資料庫
+# 初始化資料庫（建立必要的資料表，暫不插入假資料）
 with app.app_context():
     db.create_all()
-
-    # 插入 Leaderboard 假資料
-    if not Leaderboard.query.first():
-        leaderboard_data = [
-            Leaderboard(name="小明", points=120),
-            Leaderboard(name="小美", points=110),
-            Leaderboard(name="阿強", points=95),
-            Leaderboard(name="阿花", points=80),
-            Leaderboard(name="你", points=75)
-        ]
-        db.session.add_all(leaderboard_data)
-        db.session.commit()
-
-    # 插入 Badge 假資料
-    if not Badge.query.first():
-        badge_data = [
-            Badge(title="新秀達人", desc="連勝 7 天", achieved=False),
-            Badge(title="堅持王者", desc="連勝 30 天", achieved=False)
-        ]
-        db.session.add_all(badge_data)
-        db.session.commit()
-
-    # 插入 UserStatus 假資料
-    if not UserStatus.query.first():
-        user_status_data = UserStatus(today_goal=True, streak_days=5)
-        db.session.add(user_status_data)
-        db.session.commit()
-
-    # 插入 RecentActivity 假資料
-    if not RecentActivity.query.first():
-        recent_activity_data = [
-            RecentActivity(date="10/17", minutes=30),
-            RecentActivity(date="10/18", minutes=45),
-            RecentActivity(date="10/19", minutes=20),
-            RecentActivity(date="10/20", minutes=60),
-            RecentActivity(date="10/21", minutes=50),
-            RecentActivity(date="10/22", minutes=40),
-            RecentActivity(date="10/23", minutes=55)
-        ]
-        db.session.add_all(recent_activity_data)
-        db.session.commit()
-
-    # 插入 Friend 假資料
-    if not Friend.query.first():
-        friend_data = [
-            Friend(name="小明"),
-            Friend(name="小美")
-        ]
-        db.session.add_all(friend_data)
-        db.session.commit()
-
-    # 插入 PendingInvite 假資料
-    if not PendingInvite.query.first():
-        pending_invite_data = [
-            PendingInvite(from_user="阿強", time="2025-10-23 08:00"),
-            PendingInvite(from_user="志明", time="2025-10-22 18:30")
-        ]
-        db.session.add_all(pending_invite_data)
-        db.session.commit()
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
