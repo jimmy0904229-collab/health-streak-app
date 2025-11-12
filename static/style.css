@@ -161,3 +161,12 @@ button[type="submit"] {
 .accept-invite { background:#2d5be3; color:#fff; border-radius:6px; }
 .search-result-item { padding:8px; border:1px solid #eef6ff; margin-bottom:6px; border-radius:6px; display:flex; justify-content:space-between; align-items:center; }
 .search-result-item button { background:#2d5be3; color:#fff; border-radius:6px; }
+/* Avatar styles */
+.avatar {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
+    margin: 0 auto 16px;
+}
