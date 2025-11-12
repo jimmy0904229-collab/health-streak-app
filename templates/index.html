@@ -38,7 +38,7 @@
                     {% endif %}
                 </div>
                 <div class="post-actions">
-                    <button class="like-btn btn small" data-post-id="{{ post.id }}">👍 <span class="like-count">{{ post.likes }}</span></button>
+                    <button class="like-btn btn small {% if post.liked %}liked{% endif %}" data-post-id="{{ post.id }}">👍 <span class="like-count">{{ post.likes }}</span></button>
                     <button class="comment-toggle btn small" data-post-id="{{ post.id }}">💬 留言 ({{ post.comments|length }})</button>
                 </div>
                 <div class="comments" id="comments-{{ post.id }}" style="display:none;">

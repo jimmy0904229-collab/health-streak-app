@@ -8,16 +8,27 @@
 <body>
     <div class="container">
         <h2>排行榜（本週）</h2>
+        <div style="text-align:center; margin-bottom:12px;">
+            <a href="{{ url_for('leaderboard_page') }}?mode=all" class="btn small {% if mode == 'all' %}active{% endif %}" style="margin-right:6px;">全部使用者</a>
+            <a href="{{ url_for('leaderboard_page') }}?mode=friends" class="btn small {% if mode == 'friends' %}active{% endif %}">只看好友</a>
+        </div>
         <table class="leaderboard-table">
             <tr>
                 <th>名次</th>
-                <th>好友名稱</th>
+                <th>使用者</th>
                 <th>累積點數</th>
             </tr>
             {% for user in leaderboard %}
             <tr>
                 <td>{{ loop.index }}</td>
-                <td>{{ user.name }}</td>
+                <td style="display:flex; align-items:center; gap:8px;">
+                    {% if user.avatar %}
+                        <img src="{{ user.avatar }}" class="avatar" alt="avatar">
+                    {% else %}
+                        <div class="avatar placeholder">{{ user.name[0]|upper }}</div>
+                    {% endif %}
+                    <span>{{ user.name }}</span>
+                </td>
                 <td>{{ user.points }}</td>
             </tr>
             {% endfor %}

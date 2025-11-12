@@ -13,6 +13,10 @@ document.addEventListener('click', function(e){
                 if(data.ok){
                     const count = btn.querySelector('.like-count');
                     if(count) count.textContent = data.likes;
+                    // toggle visual state if server reports liked
+                    if(typeof data.liked !== 'undefined'){
+                        if(data.liked) btn.classList.add('liked'); else btn.classList.remove('liked');
+                    }
                 } else {
                     alert('按讚失敗');
                 }

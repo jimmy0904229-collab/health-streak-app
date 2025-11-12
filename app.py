@@ -178,6 +178,15 @@ class PendingInvite(db.Model):
     to_user = db.Column(db.String(80), nullable=False)
     time = db.Column(db.String(20), nullable=False)
 
+
+# Likes: one per (user, post)
+class Like(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    post_id = db.Column(db.Integer, db.ForeignKey('post.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    __table_args__ = (db.UniqueConstraint('user_id', 'post_id', name='uix_user_post_like'),)
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
@@ -185,14 +194,35 @@ def load_user(user_id):
 
 
 @app.route('/like', methods=['POST'])
+@login_required
 def like_post():
     post_id = int(request.form.get('post_id', 0))
     p = Post.query.get(post_id)
-    if p:
-        p.likes = (p.likes or 0) + 1
-        db.session.commit()
-        return jsonify({'ok': True, 'likes': p.likes})
-    return jsonify({'ok': False}), 404
+    if not p:
+        return jsonify({'ok': False}), 404
+
+    existing = Like.query.filter_by(user_id=current_user.id, post_id=post_id).first()
+    if existing:
+        # unlike
+        try:
+            db.session.delete(existing)
+            p.likes = max((p.likes or 1) - 1, 0)
+            db.session.commit()
+            return jsonify({'ok': True, 'likes': p.likes, 'liked': False})
+        except Exception:
+            db.session.rollback()
+            return jsonify({'ok': False}), 500
+    else:
+        # add like
+        try:
+            lk = Like(user_id=current_user.id, post_id=post_id)
+            db.session.add(lk)
+            p.likes = (p.likes or 0) + 1
+            db.session.commit()
+            return jsonify({'ok': True, 'likes': p.likes, 'liked': True})
+        except Exception:
+            db.session.rollback()
+            return jsonify({'ok': False}), 500
 
 
 @app.route('/comment', methods=['POST'])
@@ -226,15 +256,33 @@ def leaderboard_page():
         case((and_(Post.created_at >= start_date, Post.created_at <= end_date), Post.minutes), else_=0)
     ), 0).label('points')
 
-    q = db.session.query(User.id, User.display_name, User.username, minutes_expr).outerjoin(Post, Post.user_id == User.id).group_by(User.id).order_by(db.desc('points'))
+    # allow mode: friends or all
+    mode = (request.args.get('mode') or 'all')
+    q = db.session.query(User.id, User.display_name, User.username, minutes_expr).outerjoin(Post, Post.user_id == User.id).group_by(User.id)
+    if mode == 'friends' and current_user.is_authenticated:
+        # collect friend ids (friends of current user) and include current user
+        friend_entries = Friend.query.filter_by(owner_id=current_user.id).all()
+        friend_usernames = [f.friend_name for f in friend_entries]
+        # include self
+        friend_usernames.append(current_user.username)
+        # get user ids
+        friend_users = User.query.filter(User.username.in_(friend_usernames)).all()
+        friend_ids = [u.id for u in friend_users]
+        if friend_ids:
+            q = q.filter(User.id.in_(friend_ids))
+
+    q = q.order_by(db.desc('points'))
     results = q.all()
 
     leaderboard = []
     for r in results:
         name = r.display_name or r.username
-        leaderboard.append({'id': r.id, 'name': name, 'points': int(r.points) if r.points is not None else 0})
+        # fetch avatar if available
+        u = User.query.get(r.id)
+        avatar = u.avatar if u else None
+        leaderboard.append({'id': r.id, 'name': name, 'points': int(r.points) if r.points is not None else 0, 'avatar': avatar})
 
-    return render_template('leaderboard.html', leaderboard=leaderboard, badges=badges)
+    return render_template('leaderboard.html', leaderboard=leaderboard, badges=badges, mode=mode)
 
 
 @app.route('/badges')
@@ -274,8 +322,16 @@ def friends_page():
     # show friends for current user and invites addressed to current user
     if current_user.is_authenticated:
         friends_q = Friend.query.filter_by(owner_id=current_user.id).all()
-        friends = [f.friend_name for f in friends_q]
-        pending_invites = PendingInvite.query.filter_by(to_user=current_user.username).all()
+        friends = []
+        for f in friends_q:
+            # try to get user object for avatar/display
+            u = User.query.filter_by(username=f.friend_name).first()
+            friends.append({'username': f.friend_name, 'display': (u.display_name if u and u.display_name else f.friend_name), 'avatar': (u.avatar if u else None)})
+        pending_q = PendingInvite.query.filter_by(to_user=current_user.username).all()
+        pending_invites = []
+        for p in pending_q:
+            u = User.query.filter_by(username=p.from_user).first()
+            pending_invites.append({'id': p.id, 'from_user': p.from_user, 'time': p.time, 'avatar': (u.avatar if u else None)})
     else:
         friends = []
         pending_invites = []
@@ -315,8 +371,11 @@ def friends_search():
         return jsonify([])
     # Search users by username or display_name
     users = User.query.filter((User.username.contains(q)) | (User.display_name.contains(q))).all()
-    # return list of usernames
-    return jsonify([u.username for u in users])
+    # return list of dicts with username, display_name and avatar
+    out = []
+    for u in users:
+        out.append({'username': u.username, 'display': u.display_name or u.username, 'avatar': u.avatar})
+    return jsonify(out)
 
 
 @app.route('/friends/accept', methods=['POST'])
@@ -403,6 +462,11 @@ def index():
         if not include:
             continue
 
+        # determine if current user liked this post
+        liked_flag = False
+        if current_user.is_authenticated:
+            liked_flag = bool(Like.query.filter_by(user_id=current_user.id, post_id=p.id).first())
+
         posts.append({
             'id': p.id,
             'user': p.user.display_name or p.user.username,
@@ -413,6 +477,7 @@ def index():
             'image': p.image,
             'created_at': p.created_at.strftime('%Y-%m-%d %H:%M'),
             'likes': p.likes,
+            'liked': liked_flag,
             'comments': [{'user': c.user, 'text': c.text, 'time': c.time.strftime('%Y-%m-%d %H:%M')} for c in p.comments],
             'visibility': vis
         })

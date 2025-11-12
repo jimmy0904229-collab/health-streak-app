@@ -18,7 +18,14 @@
             <h3>你的好友</h3>
             <ul>
                 {% for f in friends %}
-                <li>{{ f }}</li>
+                <li class="friend-item">
+                    {% if f.avatar %}
+                        <img src="{{ f.avatar }}" class="avatar" alt="avatar">
+                    {% else %}
+                        <div class="avatar placeholder">{{ f.display[0]|upper }}</div>
+                    {% endif %}
+                    <strong style="margin-left:8px;">{{ f.display }}</strong>
+                </li>
                 {% else %}
                 <li>尚未有好友，試著搜尋加入好友！</li>
                 {% endfor %}
@@ -29,9 +36,14 @@
             <h3>待處理邀請</h3>
             <ul id="invite-list">
                 {% for p in pending %}
-                <li data-invite-id="{{ p.id }}">
-                    <div>
-                        <strong>{{ p.from }}</strong>
+                <li data-invite-id="{{ p.id }}" style="display:flex; align-items:center; gap:8px;">
+                    {% if p.avatar %}
+                        <img src="{{ p.avatar }}" class="avatar">
+                    {% else %}
+                        <div class="avatar placeholder">{{ p.from_user[0]|upper }}</div>
+                    {% endif %}
+                    <div style="flex:1">
+                        <strong>{{ p.from_user }}</strong>
                         <div class="muted">{{ p.time }}</div>
                     </div>
                     <div>
@@ -66,7 +78,11 @@
                 .then(r=>r.json())
                 .then(data=>{
                     if(!data || data.length===0) return res.innerHTML = '<p>找不到使用者</p>';
-                    res.innerHTML = '<ul>' + data.map(u=>`<li>${u} <button class="btn small invite-btn" data-username="${u}">邀請</button></li>`).join('') + '</ul>';
+                    res.innerHTML = '<ul>' + data.map(u=>`<li class="search-result-item">` +
+                        (u.avatar ? `<img src="${u.avatar}" class="avatar">` : `<div class="avatar placeholder">${u.display[0].toUpperCase()}</div>`) +
+                        `<div style="margin-left:8px; flex:1"><strong>${u.display}</strong><div class="muted">@${u.username}</div></div>` +
+                        `<button class="btn small invite-btn" data-username="${u.username}">邀請</button></li>`
+                    ).join('') + '</ul>';
                 })
                 .catch(()=> res.innerHTML = '<p>搜尋失敗</p>');
         });

@@ -43,6 +43,8 @@ h1, h2, h3 {
     display: inline-block;
 }
 .btn:hover { background: #1a3e8a; }
+/* active small button (used for leaderboard mode toggle) */
+.btn.small.active { background: #1a3e8a; }
 .leaderboard-table {
     width: 100%;
     border-collapse: collapse;
@@ -175,4 +177,20 @@ button[type="submit"] {
     height: 100px;
     display: block;
     margin: 0 auto 16px;
+}
+
+/* placeholder avatar (letter) */
+.avatar.placeholder {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #eef6ff;
+    color: #2d5be3;
+    font-weight: 700;
+}
+
+/* liked state for like button */
+.like-btn.liked {
+    background: #ffdede;
+    color: #c0392b;
 }
