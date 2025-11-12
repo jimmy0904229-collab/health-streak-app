@@ -29,6 +29,9 @@ db = SQLAlchemy(app)
 # 登入管理
 login_manager = LoginManager()
 login_manager.init_app(app)
+login_manager.login_view = 'login'
+login_manager.login_message = '請先登入以存取此頁面'
+login_manager.login_message_category = 'info'
 
 # 定義資料模型
 class User(UserMixin, db.Model):
