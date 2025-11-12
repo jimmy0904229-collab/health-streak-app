@@ -20,6 +20,7 @@
 
         <div class="profile-settings">
             <h3>個人設定</h3>
+                        <p style="text-align:center;"><a href="{{ url_for('logout') }}" class="btn">登出</a></p>
             {% with messages = get_flashed_messages() %}
               {% if messages %}
                 <div class="flash">{{ messages[0] }}</div>

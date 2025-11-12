@@ -21,6 +21,9 @@
                         {% else %}
                             <div class="avatar placeholder">{{ post.user[0]|upper }}</div>
                         {% endif %}
+                        {% if post.visibility and post.visibility == 'friends' %}
+                            <span title="僅好友可見" style="font-size:0.9em;color:#999; margin-left:6px;">🔒</span>
+                        {% endif %}
                         <strong class="post-user">{{ post.user }}</strong>
                     </div>
                     <span class="post-time">{{ post.created_at }}</span>

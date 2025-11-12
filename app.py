@@ -128,6 +128,7 @@ class Post(db.Model):
     sport = db.Column(db.String(80), nullable=True)
     minutes = db.Column(db.Integer, default=0)
     message = db.Column(db.Text, nullable=True)
+    visibility = db.Column(db.String(20), default='public')
     image = db.Column(db.String(300), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     likes = db.Column(db.Integer, default=0)
@@ -292,12 +293,13 @@ def checkin():
         except Exception:
             minutes = 0
         message = request.form.get('message', '').strip()
+        visibility = request.form.get('visibility', 'public')
         image = None
         file = request.files.get('image')
         if file and file.filename and allowed_file(file.filename):
             image = save_uploaded_file(file)
 
-        post = Post(user_id=current_user.id, sport=sport or None, minutes=minutes, message=message or None, image=image)
+        post = Post(user_id=current_user.id, sport=sport or None, minutes=minutes, message=message or None, image=image, visibility=visibility)
         db.session.add(post)
         db.session.commit()
         flash('已新增打卡貼文')
@@ -379,6 +381,28 @@ def index():
     posts_q = Post.query.order_by(Post.created_at.desc()).all()
     posts = []
     for p in posts_q:
+        # visibility: include post if public OR if it's friends-only and the current user is allowed
+        include = False
+        try:
+            vis = getattr(p, 'visibility', 'public')
+        except Exception:
+            vis = 'public'
+        if vis == 'public':
+            include = True
+        else:
+            # friends-only: include if current_user is author or current_user is friend with author
+            if current_user.is_authenticated and (current_user.id == p.user_id):
+                include = True
+            else:
+                # check Friend table for owner=current_user and friend_name=post author username
+                if current_user.is_authenticated:
+                    is_friend = Friend.query.filter_by(owner_id=current_user.id, friend_name=p.user.username).first()
+                    if is_friend:
+                        include = True
+
+        if not include:
+            continue
+
         posts.append({
             'id': p.id,
             'user': p.user.display_name or p.user.username,
@@ -389,7 +413,8 @@ def index():
             'image': p.image,
             'created_at': p.created_at.strftime('%Y-%m-%d %H:%M'),
             'likes': p.likes,
-            'comments': [{'user': c.user, 'text': c.text, 'time': c.time.strftime('%Y-%m-%d %H:%M')} for c in p.comments]
+            'comments': [{'user': c.user, 'text': c.text, 'time': c.time.strftime('%Y-%m-%d %H:%M')} for c in p.comments],
+            'visibility': vis
         })
     # 傳遞目前使用者狀態給模板
     return render_template('index.html', status=current_user, posts=posts)

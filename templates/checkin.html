@@ -37,6 +37,11 @@
             <input type="text" name="sport" required>
             <label>運動時間（分鐘）：</label>
             <input type="number" name="minutes" min="1" required>
+            <label>貼文可見範圍：</label>
+            <select name="visibility" class="input-small">
+                <option value="public">對所有人公開</option>
+                <option value="friends">僅好友可見</option>
+            </select>
             <label>貼文內容（可加上感想或註記）：</label>
             <textarea name="message" rows="4" placeholder="今天怎麼樣？寫下你的心得吧..." style="width:100%; padding:8px; border-radius:4px; border:1px solid #dbeafe;"></textarea>
             <label>上傳照片：</label>
