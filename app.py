@@ -133,6 +133,12 @@ def leaderboard_page():
     badges = Badge.query.all()
     return render_template('leaderboard.html', leaderboard=leaderboard, badges=badges)
 
+
+@app.route('/badges')
+def badges_page():
+    badges = Badge.query.all()
+    return render_template('badges.html', badges=badges)
+
 @app.route('/stats')
 def stats():
     recent_7_days = RecentActivity.query.all()
@@ -144,6 +150,34 @@ def friends_page():
     friends = Friend.query.all()
     pending_invites = PendingInvite.query.all()
     return render_template('friends.html', friends=friends, pending=pending_invites)
+
+
+@app.route('/checkin', methods=['GET', 'POST'])
+@login_required
+def checkin():
+    # Simple checkin page: on GET render form, on POST create a Post and redirect to home
+    if request.method == 'POST':
+        sport = request.form.get('sport', '').strip()
+        try:
+            minutes = int(request.form.get('minutes', 0))
+        except Exception:
+            minutes = 0
+        message = request.form.get('message', '').strip()
+        image = None
+        file = request.files.get('image')
+        if file and file.filename and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(filepath)
+            image = url_for('static', filename=f'uploads/{filename}')
+
+        post = Post(user_id=current_user.id, sport=sport or None, minutes=minutes, message=message or None, image=image)
+        db.session.add(post)
+        db.session.commit()
+        flash('已新增打卡貼文')
+        return redirect(url_for('index'))
+
+    return render_template('checkin.html')
 
 
 @app.route('/friends/search')
