@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
-from datetime import datetime
+from datetime import datetime, timedelta
 import base64
 import io
 from werkzeug.utils import secure_filename
@@ -209,10 +209,30 @@ def comment_post():
         return jsonify({'ok': True, 'comment': {'user': comment.user, 'text': comment.text, 'time': comment.time.strftime('%Y-%m-%d %H:%M')}})
     return jsonify({'ok': False}), 404
 
+from sqlalchemy import case, and_
+
+
 @app.route('/leaderboard')
 def leaderboard_page():
-    leaderboard = Leaderboard.query.all()
+    # Calculate leaderboard based on total minutes in the last 7 days
     badges = Badge.query.all()
+    today = datetime.utcnow().date()
+    start_date = datetime.combine(today - timedelta(days=6), datetime.min.time())
+    end_date = datetime.combine(today, datetime.max.time())
+
+    # Sum minutes per user for posts in the last 7 days; include users with zero via outerjoin
+    minutes_expr = db.func.coalesce(db.func.sum(
+        case((and_(Post.created_at >= start_date, Post.created_at <= end_date), Post.minutes), else_=0)
+    ), 0).label('points')
+
+    q = db.session.query(User.id, User.display_name, User.username, minutes_expr).outerjoin(Post, Post.user_id == User.id).group_by(User.id).order_by(db.desc('points'))
+    results = q.all()
+
+    leaderboard = []
+    for r in results:
+        name = r.display_name or r.username
+        leaderboard.append({'id': r.id, 'name': name, 'points': int(r.points) if r.points is not None else 0})
+
     return render_template('leaderboard.html', leaderboard=leaderboard, badges=badges)
 
 
@@ -223,7 +243,28 @@ def badges_page():
 
 @app.route('/stats')
 def stats():
-    recent_7_days = RecentActivity.query.all()
+    # Compute recent 7 days activity for current_user from Post table
+    recent_7_days = []
+    if current_user.is_authenticated:
+        today = datetime.utcnow().date()
+        # build list of last 7 dates (oldest first)
+        dates = [(today - timedelta(days=i)) for i in range(6, -1, -1)]
+        for d in dates:
+            start = datetime.combine(d, datetime.min.time())
+            end = datetime.combine(d, datetime.max.time())
+            minutes_sum = db.session.query(db.func.coalesce(db.func.sum(Post.minutes), 0)).filter(
+                Post.user_id == current_user.id,
+                Post.created_at >= start,
+                Post.created_at <= end
+            ).scalar() or 0
+            recent_7_days.append({'date': d.strftime('%m-%d'), 'minutes': int(minutes_sum)})
+    else:
+        # not logged in, show zeros
+        today = datetime.utcnow().date()
+        dates = [(today - timedelta(days=i)) for i in range(6, -1, -1)]
+        for d in dates:
+            recent_7_days.append({'date': d.strftime('%m-%d'), 'minutes': 0})
+
     return render_template('stats.html', recent_7_days=recent_7_days)
 
 
