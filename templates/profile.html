@@ -9,6 +9,11 @@
     <div class="container">
         <h2>個人主頁</h2>
         <div class="profile-card">
+            {% if profile.avatar %}
+                <img src="{{ profile.avatar }}" alt="大頭貼" class="avatar">
+            {% else %}
+                <p>尚未上傳大頭貼</p>
+            {% endif %}
             <p><strong>使用者：</strong> {{ profile.display_name }}</p>
             <p><strong>連續運動天數：</strong> {{ profile.streak_days }} 天</p>
         </div>
@@ -20,12 +25,14 @@
                 <div class="flash">{{ messages[0] }}</div>
               {% endif %}
             {% endwith %}
-            <form method="POST">
+            <form method="POST" enctype="multipart/form-data">
                 <label>顯示名稱：</label>
                 <input type="text" name="display_name" value="{{ profile.display_name }}">
                 <label>連續運動天數：</label>
                 <input type="number" name="streak_days" min="0" value="{{ profile.streak_days }}">
                 <label><input type="checkbox" name="notify" {% if profile.notify %}checked{% endif %}> 接收通知</label>
+                <label>上傳大頭貼：</label>
+                <input type="file" name="avatar" accept="image/*">
                 <button type="submit" class="btn">儲存設定</button>
             </form>
         </div>

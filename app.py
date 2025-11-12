@@ -2,6 +2,8 @@ from flask import Flask, render_template, request, redirect, url_for, flash, jso
 from datetime import datetime
 import base64
 import io
+from werkzeug.utils import secure_filename
+import os
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'  # 用於 flash 訊息
@@ -77,6 +79,15 @@ profile = {
     'streak_days': user_status.get('streak_days', 0),
     'notify': True
 }
+
+# 設定上傳資料夾
+UPLOAD_FOLDER = 'static/uploads'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @app.route('/')
 def index():
@@ -200,6 +211,7 @@ def profile_page():
         if display:
             profile['display_name'] = display
         profile['notify'] = notify
+
         # allow manual update of streak (for demo)
         try:
             sd = int(request.form.get('streak_days', profile.get('streak_days', 0)))
@@ -207,6 +219,15 @@ def profile_page():
             user_status['streak_days'] = sd
         except Exception:
             pass
+
+        # 處理大頭貼上傳
+        file = request.files.get('avatar')
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(filepath)
+            profile['avatar'] = url_for('static', filename=f'uploads/{filename}')
+
         flash('個人設定已更新')
         return redirect(url_for('profile_page'))
     return render_template('profile.html', profile=profile)
