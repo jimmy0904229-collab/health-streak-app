@@ -382,6 +382,7 @@ def index():
         posts.append({
             'id': p.id,
             'user': p.user.display_name or p.user.username,
+            'avatar': p.user.avatar,
             'sport': p.sport,
             'minutes': p.minutes,
             'message': p.message,

@@ -163,10 +163,16 @@ button[type="submit"] {
 .search-result-item button { background:#2d5be3; color:#fff; border-radius:6px; }
 /* Avatar styles */
 .avatar {
-    width: 100px;
-    height: 100px;
+    width: 40px;
+    height: 40px;
     border-radius: 50%;
     object-fit: cover;
+    vertical-align: middle;
+}
+
+.profile-avatar {
+    width: 100px;
+    height: 100px;
     display: block;
     margin: 0 auto 16px;
 }
