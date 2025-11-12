@@ -10,6 +10,33 @@ from flask_login import LoginManager, UserMixin, login_user, logout_user, login_
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'  # 用於 flash 訊息
 
+# 社群貼文（in-memory 假資料）
+posts = [
+    {
+        "id": 1,
+        "user": "小明",
+        "sport": "慢跑",
+        "minutes": 30,
+        "image": "",
+        "created_at": datetime.now().strftime('%Y-%m-%d %H:%M'),
+        "likes": 3,
+        "comments": [
+            {"user": "小美", "text": "太厲害了！", "time": "2025-10-23 09:10"}
+        ]
+    },
+    {
+        "id": 2,
+        "user": "阿花",
+        "sport": "瑜伽",
+        "minutes": 45,
+        "image": "",
+        "created_at": datetime.now().strftime('%Y-%m-%d %H:%M'),
+        "likes": 1,
+        "comments": []
+    }
+]
+next_post_id = 3
+
 # 資料庫設定
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
