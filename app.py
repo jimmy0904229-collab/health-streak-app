@@ -6,6 +6,8 @@ from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import current_user
 import os
+import uuid
+from urllib.parse import urljoin
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required
 
@@ -25,6 +27,83 @@ def allowed_file(filename):
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
+
+# --- Optional S3 upload support ---
+def s3_configured():
+    return bool(os.environ.get('AWS_S3_BUCKET'))
+
+def get_s3_client():
+    if not s3_configured():
+        return None
+    import boto3
+    session = boto3.session.Session()
+    s3 = session.client(
+        's3',
+        aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
+        aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
+        region_name=os.environ.get('AWS_REGION'),
+        endpoint_url=os.environ.get('S3_ENDPOINT')  # optional custom endpoint (e.g. DigitalOcean Spaces)
+    )
+    return s3
+
+def get_s3_base_url():
+    # Optional explicit base URL (useful for Spaces or custom endpoints)
+    base = os.environ.get('S3_BASE_URL')
+    if base:
+        return base.rstrip('/')
+    # Fallback to AWS-style public URL if region provided
+    bucket = os.environ.get('AWS_S3_BUCKET')
+    region = os.environ.get('AWS_REGION')
+    if bucket and region:
+        return f'https://{bucket}.s3.{region}.amazonaws.com'
+    return None
+
+def save_uploaded_file(file):
+    """Save uploaded file either to S3 (if configured) or local static/uploads.
+    Returns the public URL path to store in DB/template.
+    """
+    filename = secure_filename(file.filename)
+    # generate unique name to avoid collisions
+    unique_name = f"{uuid.uuid4().hex}_{filename}"
+    # Try S3
+    s3 = get_s3_client()
+    if s3:
+        bucket = os.environ.get('AWS_S3_BUCKET')
+        key = f'uploads/{unique_name}'
+        content_type = getattr(file, 'content_type', None) or 'application/octet-stream'
+        # read file content
+        file.stream.seek(0)
+        data = file.read()
+        try:
+            s3.put_object(Bucket=bucket, Key=key, Body=data, ACL='public-read', ContentType=content_type)
+        except Exception:
+            # fallback to local if upload fails
+            pass
+        else:
+            base = get_s3_base_url()
+            if base:
+                # if base explicitly provided, it may already include bucket
+                if base.startswith('http') and ('{bucket}' not in base):
+                    # For DO Spaces, base should be like https://{bucket}.{endpoint}
+                    if '{bucket}' in base:
+                        url = base.format(bucket=bucket) + f'/{key}'
+                    else:
+                        # if base contains the bucket already, just append key
+                        url = base + f'/{key}'
+                else:
+                    url = f'https://{bucket}.s3.amazonaws.com/{key}'
+            else:
+                url = f'https://{bucket}.s3.amazonaws.com/{key}'
+            return url
+
+    # Local fallback
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_name)
+    # ensure folder exists
+    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+    file.stream.seek(0)
+    file.save(filepath)
+    return url_for('static', filename=f'uploads/{unique_name}')
+
 
 # 登入管理
 login_manager = LoginManager()
@@ -166,10 +245,7 @@ def checkin():
         image = None
         file = request.files.get('image')
         if file and file.filename and allowed_file(file.filename):
-            filename = secure_filename(file.filename)
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(filepath)
-            image = url_for('static', filename=f'uploads/{filename}')
+            image = save_uploaded_file(file)
 
         post = Post(user_id=current_user.id, sport=sport or None, minutes=minutes, message=message or None, image=image)
         db.session.add(post)
@@ -249,10 +325,7 @@ def profile_page():
         # 處理上傳大頭貼
         file = request.files.get('avatar')
         if file and file.filename and allowed_file(file.filename):
-            filename = secure_filename(file.filename)
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(filepath)
-            current_user.avatar = url_for('static', filename=f'uploads/{filename}')
+            current_user.avatar = save_uploaded_file(file)
 
         db.session.commit()
         flash('個人設定已更新')

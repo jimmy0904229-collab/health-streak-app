@@ -5,14 +5,19 @@ document.addEventListener('click', function(e){
         const postId = btn.dataset.postId;
         const form = new FormData();
         form.append('post_id', postId);
+        // optimistic UI: disable button until response
+        btn.disabled = true;
         fetch('/like', {method: 'POST', body: form})
             .then(r => r.json())
             .then(data => {
                 if(data.ok){
                     const count = btn.querySelector('.like-count');
                     if(count) count.textContent = data.likes;
+                } else {
+                    alert('按讚失敗');
                 }
-            });
+            }).catch(()=> alert('網路錯誤，按讚失敗'))
+            .finally(()=> btn.disabled = false);
     }
 
     if(e.target.closest('.comment-toggle')){
@@ -31,6 +36,8 @@ document.addEventListener('submit', function(e){
         const postId = formEl.dataset.postId;
         const fd = new FormData(formEl);
         fd.append('post_id', postId);
+        const submitBtn = formEl.querySelector('button[type="submit"]');
+        if(submitBtn) submitBtn.disabled = true;
         fetch('/comment', {method: 'POST', body: fd})
             .then(r => r.json())
             .then(data => {
@@ -40,20 +47,22 @@ document.addEventListener('submit', function(e){
                     li.innerHTML = `<strong>${data.comment.user}</strong>: ${data.comment.text} <span class="c-time">${data.comment.time}</span>`;
                     list.appendChild(li);
                     // clear input
-                    formEl.querySelector('input[name="text"]').value = '';
+                    const textInput = formEl.querySelector('input[name="text"]');
+                    if(textInput) textInput.value = '';
                     // update comment count in toggle button
                     const toggle = document.querySelector('.comment-toggle[data-post-id="'+postId+'"]');
                     if(toggle){
-                        const match = toggle.textContent.match(/留言 \((\d+)\)/);
-                        if(match){
-                            const n = parseInt(match[1]) + 1;
+                        const m = toggle.textContent.match(/留言 \((\d+)\)/);
+                        if(m){
+                            const n = parseInt(m[1]) + 1;
                             toggle.textContent = `💬 留言 (${n})`;
                         }
                     }
                 } else {
-                    alert('留言失敗');
+                    alert(data.error || '留言失敗');
                 }
-            }).catch(()=> alert('留言錯誤'));
+            }).catch(()=> alert('網路或伺服器錯誤，留言失敗'))
+            .finally(()=> { if(submitBtn) submitBtn.disabled = false; });
     }
 });
 
