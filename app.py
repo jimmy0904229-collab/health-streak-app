@@ -11,7 +11,6 @@ from urllib.parse import urljoin
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required
 from flask_migrate import Migrate
-from flask_dance.contrib.google import make_google_blueprint, google
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'  # 用於 flash 訊息
@@ -32,18 +31,7 @@ db = SQLAlchemy(app)
 # Initialize Flask-Migrate
 migrate = Migrate(app, db)
 
-# --- Google OAuth (Flask-Dance) ---
-# Requires env vars: GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET
-GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_OAUTH_CLIENT_ID')
-GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET')
-if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
-    google_bp = make_google_blueprint(
-        client_id=GOOGLE_CLIENT_ID,
-        client_secret=GOOGLE_CLIENT_SECRET,
-        scope=['profile', 'email'],
-        redirect_url='/login/google/authorized'
-    )
-    app.register_blueprint(google_bp, url_prefix='/login')
+
 
 # --- Optional S3 upload support ---
 def s3_configured():
@@ -555,43 +543,10 @@ def login():
             flash('登入成功！')
             return redirect(url_for('index'))
         flash('登入失敗，請檢查帳號或密碼')
-    # indicate to template whether Google OAuth blueprint is registered
-    google_enabled = 'google' in app.blueprints
-    return render_template('login.html', google_enabled=google_enabled)
+    return render_template('login.html')
 
 
-@app.route('/login/google/authorized')
-def google_authorized():
-    # This route is called after Google OAuth flow
-    if not google.authorized:
-        flash('Google 登入未授權')
-        return redirect(url_for('login'))
-    resp = google.get('/oauth2/v2/userinfo')
-    if not resp.ok:
-        flash('無法取得 Google 使用者資訊')
-        return redirect(url_for('login'))
-    info = resp.json()
-    email = info.get('email')
-    name = info.get('name') or (email.split('@')[0] if email else 'GoogleUser')
-    picture = info.get('picture')
 
-    if not email:
-        flash('Google 帳號沒有 email，無法建立使用者')
-        return redirect(url_for('login'))
-
-    # use email as username (unique)
-    user = User.query.filter_by(username=email).first()
-    if not user:
-        # create a new user (random password since OAuth handles auth)
-        import uuid
-        pwd = generate_password_hash(uuid.uuid4().hex)
-        user = User(username=email, password=pwd, display_name=name, avatar=picture)
-        db.session.add(user)
-        db.session.commit()
-
-    login_user(user)
-    flash('使用 Google 登入成功')
-    return redirect(url_for('index'))
 
 @app.route('/logout')
 @login_required
