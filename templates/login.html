@@ -20,6 +20,13 @@
             <input type="password" name="password" required>
             <button type="submit" class="btn">登入</button>
         </form>
+    <div style="text-align:center; margin-top:12px;">
+      {% if google_bp and google_bp.session %}
+        <a href="{{ url_for('google.login') }}" class="btn">使用 Google 登入</a>
+      {% else %}
+        <!-- Google OAuth 尚未設定 -->
+      {% endif %}
+    </div>
         <p>沒有帳號？ <a href="{{ url_for('register') }}">註冊</a></p>
     </div>
 </body>
