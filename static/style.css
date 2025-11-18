@@ -111,8 +111,8 @@ button[type="submit"] {
 .feed { margin-top: 18px; }
 .post { border: 1px solid #eef6ff; padding: 12px; border-radius: 8px; margin-bottom: 12px; background: #fff; }
 .post-header { display:flex; justify-content:space-between; margin-bottom:8px; }
-.post-image { max-width:100%; border-radius:6px; margin-top:8px; }
-.post-message { margin:8px 0; background:#f6fbff; padding:10px; border-radius:6px; border:1px solid #e6f4ff; }
+.post-image { width:100%; height:240px; object-fit:cover; border-radius:8px; margin-top:8px; }
+.post-message { margin:8px 0; background:#f6fbff; padding:10px; border-radius:6px; border:1px solid #e6f4ff; min-height:240px; }
 .post-actions { margin-top:8px; display:flex; gap:8px; }
 .small { padding:6px 10px; font-size:0.9em; }
 .comments { margin-top:10px; border-top:1px dashed #eef6ff; padding-top:8px; }
@@ -172,10 +172,10 @@ button[type="submit"] {
     vertical-align: middle;
 }
 
-/* Make post images consistent size */
+/* Make post images consistent size and match post message height */
 .post-image {
-    width: 320px;
-    height: 180px;
+    width: 100%;
+    height: 240px;
     object-fit: cover;
     border-radius: 8px;
 }
