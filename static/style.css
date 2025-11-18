@@ -172,6 +172,14 @@ button[type="submit"] {
     vertical-align: middle;
 }
 
+/* Make post images consistent size */
+.post-image {
+    width: 320px;
+    height: 180px;
+    object-fit: cover;
+    border-radius: 8px;
+}
+
 .profile-avatar {
     width: 100px;
     height: 100px;

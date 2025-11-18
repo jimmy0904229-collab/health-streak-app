@@ -31,15 +31,33 @@
                 <div class="post-body">
                     <p><strong>{{ post.sport }}</strong> • {{ post.minutes }} 分鐘</p>
                     {% if post.message %}
-                    <p class="post-message">{{ post.message }}</p>
+                    <p class="post-message">{{ post.message_html|safe if post.message_html else post.message }}</p>
                     {% endif %}
                     {% if post.image %}
                         <img src="{{ post.image }}" class="post-image">
+                    {% endif %}
+                    {% if post.original %}
+                        <div class="shared-original">
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                {% if post.original.avatar %}
+                                    <img src="{{ post.original.avatar }}" class="avatar" alt="avatar">
+                                {% else %}
+                                    <div class="avatar placeholder">{{ post.original.user[0]|upper }}</div>
+                                {% endif %}
+                                <strong>{{ post.original.user }}</strong>
+                            </div>
+                            <div style="margin-top:8px; padding:8px; border:1px solid #eef6ff; border-radius:6px; background:#fafcff;">
+                                {% if post.original.sport %}<div><strong>{{ post.original.sport }}</strong> • {{ post.original.minutes }} 分鐘</div>{% endif %}
+                                {% if post.original.message %}<div>{{ post.original.message }}</div>{% endif %}
+                                {% if post.original.image %}<img src="{{ post.original.image }}" class="post-image" style="max-width:120px; display:block; margin-top:8px;">{% endif %}
+                            </div>
+                        </div>
                     {% endif %}
                 </div>
                 <div class="post-actions">
                     <button class="like-btn btn small {% if post.liked %}liked{% endif %}" data-post-id="{{ post.id }}">👍 <span class="like-count">{{ post.likes }}</span></button>
                     <button class="comment-toggle btn small" data-post-id="{{ post.id }}">💬 留言 ({{ post.comments|length }})</button>
+                    <button class="share-btn btn small" data-post-id="{{ post.id }}">🔁 分享</button>
                 </div>
                 <div class="comments" id="comments-{{ post.id }}" style="display:none;">
                     <ul class="comment-list">

@@ -135,6 +135,7 @@ class Post(db.Model):
     message = db.Column(db.Text, nullable=True)
     visibility = db.Column(db.String(20), default='public')
     image = db.Column(db.String(300), nullable=True)
+    shared_from_id = db.Column(db.Integer, db.ForeignKey('post.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     likes = db.Column(db.Integer, default=0)
     user = db.relationship('User', backref=db.backref('posts', lazy=True))
@@ -143,6 +144,8 @@ class Comment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     post_id = db.Column(db.Integer, db.ForeignKey('post.id'), nullable=False)
     user = db.Column(db.String(120), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    avatar = db.Column(db.String(300), nullable=True)
     text = db.Column(db.Text, nullable=False)
     time = db.Column(db.DateTime, default=datetime.utcnow)
     post = db.relationship('Post', backref=db.backref('comments', lazy=True))
@@ -233,19 +236,29 @@ def like_post():
 @app.route('/comment', methods=['POST'])
 def comment_post():
     post_id = int(request.form.get('post_id', 0))
-    user = request.form.get('user') or (current_user.display_name or current_user.username)
+    # determine commenter: if logged-in use current_user, else use provided user field
+    if current_user.is_authenticated:
+        commenter_name = current_user.display_name or current_user.username
+        commenter_id = current_user.id
+        commenter_avatar = current_user.avatar
+    else:
+        commenter_name = request.form.get('user') or '匿名'
+        commenter_id = None
+        commenter_avatar = None
+
     text = request.form.get('text', '').strip()
     if not text:
         return jsonify({'ok': False, 'error': 'empty'}), 400
     p = Post.query.get(post_id)
     if p:
-        comment = Comment(post_id=p.id, user=user, text=text)
+        comment = Comment(post_id=p.id, user=commenter_name, user_id=commenter_id, avatar=commenter_avatar, text=text)
         db.session.add(comment)
         db.session.commit()
-        return jsonify({'ok': True, 'comment': {'user': comment.user, 'text': comment.text, 'time': comment.time.strftime('%Y-%m-%d %H:%M')}})
+        return jsonify({'ok': True, 'comment': {'user': comment.user, 'avatar': comment.avatar, 'text': comment.text, 'time': comment.time.strftime('%Y-%m-%d %H:%M')}})
     return jsonify({'ok': False}), 404
 
 from sqlalchemy import case, and_
+import re
 
 
 @app.route('/leaderboard')
@@ -360,6 +373,7 @@ def checkin():
         if file and file.filename and allowed_file(file.filename):
             image = save_uploaded_file(file)
 
+        # create post (mentions will be rendered into links when displaying)
         post = Post(user_id=current_user.id, sport=sport or None, minutes=minutes, message=message or None, image=image, visibility=visibility)
         db.session.add(post)
         db.session.commit()
@@ -381,6 +395,38 @@ def friends_search():
     for u in users:
         out.append({'username': u.username, 'display': u.display_name or u.username, 'avatar': u.avatar})
     return jsonify(out)
+
+
+@app.route('/share', methods=['POST'])
+@login_required
+def share_post():
+    try:
+        orig_id = int(request.form.get('original_id', 0))
+    except Exception:
+        return jsonify({'ok': False}), 400
+    message = request.form.get('message', '').strip()
+    orig = Post.query.get(orig_id)
+    if not orig:
+        return jsonify({'ok': False}), 404
+    # create a new post that references the original
+    newp = Post(user_id=current_user.id, sport=None, minutes=0, message=message or None, image=None, visibility='public', shared_from_id=orig.id)
+    db.session.add(newp)
+    db.session.commit()
+    return jsonify({'ok': True, 'post_id': newp.id})
+
+
+@app.route('/user/<username>')
+def user_page(username):
+    u = User.query.filter_by(username=username).first()
+    if not u:
+        flash('找不到使用者')
+        return redirect(url_for('index'))
+    # show user's public posts
+    posts_q = Post.query.filter_by(user_id=u.id).order_by(Post.created_at.desc()).all()
+    posts = []
+    for p in posts_q:
+        posts.append({'id': p.id, 'sport': p.sport, 'minutes': p.minutes, 'message': p.message, 'image': p.image, 'created_at': p.created_at.strftime('%Y-%m-%d %H:%M')})
+    return render_template('user.html', user=u, posts=posts)
 
 
 @app.route('/friends/accept', methods=['POST'])
@@ -472,6 +518,40 @@ def index():
         if current_user.is_authenticated:
             liked_flag = bool(Like.query.filter_by(user_id=current_user.id, post_id=p.id).first())
 
+        # build comment list with avatars if available
+        comments_list = []
+        for c in p.comments:
+            c_avatar = getattr(c, 'avatar', None)
+            if not c_avatar:
+                # try to resolve by username
+                u_c = User.query.filter_by(username=c.user).first()
+                if u_c:
+                    c_avatar = u_c.avatar
+            comments_list.append({'user': c.user, 'avatar': c_avatar, 'text': c.text, 'time': c.time.strftime('%Y-%m-%d %H:%M')})
+
+        # convert mentions (@username) in message to links
+        msg_html = None
+        if p.message:
+            def repl_mention(m):
+                uname = m.group(1)
+                return f'<a href="{url_for("user_page", username=uname)}">@{uname}</a>'
+            msg_html = re.sub(r'@([A-Za-z0-9_\-]+)', repl_mention, p.message)
+
+        # include shared original post if present
+        original = None
+        if getattr(p, 'shared_from_id', None):
+            orig = Post.query.get(p.shared_from_id)
+            if orig:
+                original = {
+                    'id': orig.id,
+                    'user': orig.user.display_name or orig.user.username,
+                    'avatar': orig.user.avatar,
+                    'sport': orig.sport,
+                    'minutes': orig.minutes,
+                    'message': orig.message,
+                    'image': orig.image
+                }
+
         posts.append({
             'id': p.id,
             'user': p.user.display_name or p.user.username,
@@ -479,11 +559,13 @@ def index():
             'sport': p.sport,
             'minutes': p.minutes,
             'message': p.message,
+            'message_html': msg_html,
             'image': p.image,
             'created_at': p.created_at.strftime('%Y-%m-%d %H:%M'),
             'likes': p.likes,
             'liked': liked_flag,
-            'comments': [{'user': c.user, 'text': c.text, 'time': c.time.strftime('%Y-%m-%d %H:%M')} for c in p.comments],
+            'comments': comments_list,
+            'original': original,
             'visibility': vis
         })
     # 傳遞目前使用者狀態給模板
@@ -516,7 +598,13 @@ def profile_page():
         flash('個人設定已更新')
         return redirect(url_for('profile_page'))
 
-    return render_template('profile.html', profile=current_user)
+    # also show user's own posts
+    user_posts = Post.query.filter_by(user_id=current_user.id).order_by(Post.created_at.desc()).all()
+    # build simple post dicts for profile
+    p_list = []
+    for p in user_posts:
+        p_list.append({'id': p.id, 'sport': p.sport, 'minutes': p.minutes, 'message': p.message, 'image': p.image, 'created_at': p.created_at.strftime('%Y-%m-%d %H:%M')})
+    return render_template('profile.html', profile=current_user, posts=p_list)
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():

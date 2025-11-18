@@ -24,6 +24,24 @@ document.addEventListener('click', function(e){
             .finally(()=> btn.disabled = false);
     }
 
+    if(e.target.closest('.share-btn')){
+        const btn = e.target.closest('.share-btn');
+        const postId = btn.dataset.postId;
+        const comment = prompt('你要附帶分享的訊息（可留空）');
+        const fd = new FormData(); fd.append('original_id', postId); fd.append('message', comment || '');
+        fetch('/share', {method: 'POST', body: fd})
+            .then(r => r.json())
+            .then(j => {
+                if(j.ok){
+                    alert('已分享貼文');
+                    // reload page to show share
+                    window.location.reload();
+                } else {
+                    alert('分享失敗');
+                }
+            }).catch(()=> alert('網路錯誤'));
+    }
+
     if(e.target.closest('.comment-toggle')){
         const btn = e.target.closest('.comment-toggle');
         const postId = btn.dataset.postId;
@@ -48,7 +66,8 @@ document.addEventListener('submit', function(e){
                 if(data.ok){
                     const list = formEl.parentElement.querySelector('.comment-list');
                     const li = document.createElement('li');
-                    li.innerHTML = `<strong>${data.comment.user}</strong>: ${data.comment.text} <span class="c-time">${data.comment.time}</span>`;
+                    const avatar = data.comment.avatar ? `<img src="${data.comment.avatar}" class="avatar" style="width:28px;height:28px;object-fit:cover;border-radius:50%;margin-right:8px;">` : `<div class="avatar placeholder" style="width:28px;height:28px;margin-right:8px;display:inline-flex;align-items:center;justify-content:center;">${data.comment.user[0].toUpperCase()}</div>`;
+                    li.innerHTML = `${avatar}<strong>${data.comment.user}</strong>: ${data.comment.text} <span class="c-time">${data.comment.time}</span>`;
                     list.appendChild(li);
                     // clear input
                     const textInput = formEl.querySelector('input[name="text"]');
