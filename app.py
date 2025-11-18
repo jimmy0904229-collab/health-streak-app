@@ -555,7 +555,9 @@ def login():
             flash('登入成功！')
             return redirect(url_for('index'))
         flash('登入失敗，請檢查帳號或密碼')
-    return render_template('login.html')
+    # indicate to template whether Google OAuth blueprint is registered
+    google_enabled = 'google' in app.blueprints
+    return render_template('login.html', google_enabled=google_enabled)
 
 
 @app.route('/login/google/authorized')
