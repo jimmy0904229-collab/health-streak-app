@@ -24,14 +24,25 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# 資料庫設定：支援本機 sqlite 或使用環境變數 DATABASE_URL（Render 的 managed Postgres）
-db_url = os.environ.get('DATABASE_URL')
+# 資料庫設定：支援本機 sqlite、直接的 DATABASE_URL，或用零散的環境變數組裝（DB_HOST/DB_NAME/DB_USER/DB_PASSWORD）
+db_url = os.environ.get('DATABASE_URL') or os.environ.get('RENDER_DATABASE_URL')
+if not db_url:
+    db_host = os.environ.get('DB_HOST') or os.environ.get('PGHOST')
+    db_name = os.environ.get('DB_NAME') or os.environ.get('PGDATABASE')
+    db_user = os.environ.get('DB_USER') or os.environ.get('PGUSER')
+    db_pass = os.environ.get('DB_PASSWORD') or os.environ.get('PGPASSWORD')
+    db_port = os.environ.get('DB_PORT') or os.environ.get('PGPORT')
+    if db_host and db_name and db_user:
+        auth = f"{db_user}:{db_pass}@" if db_pass else f"{db_user}@"
+        host_part = f"{db_host}:{db_port}" if db_port else db_host
+        db_url = f"postgresql://{auth}{host_part}/{db_name}"
+
 if db_url:
     # Render 以及某些服務會回傳以 postgres:// 開頭的 URL，SQLAlchemy/psycopg2 期望 postgresql://
     if db_url.startswith('postgres://'):
         db_url = db_url.replace('postgres://', 'postgresql://', 1)
     app.config['SQLALCHEMY_DATABASE_URI'] = db_url
-    # 如果是 Postgres，建議開啟 sslmode=require（psycopg2 會使用此參數）
+    # 如果是 Postgres，建議開啟 sslmode=require（可由 PGSSLMODE 環境變數覆蓋）
     app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
         'connect_args': {'sslmode': os.environ.get('PGSSLMODE', 'require')}
     }
