@@ -24,8 +24,20 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# 資料庫設定
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
+# 資料庫設定：支援本機 sqlite 或使用環境變數 DATABASE_URL（Render 的 managed Postgres）
+db_url = os.environ.get('DATABASE_URL')
+if db_url:
+    # Render 以及某些服務會回傳以 postgres:// 開頭的 URL，SQLAlchemy/psycopg2 期望 postgresql://
+    if db_url.startswith('postgres://'):
+        db_url = db_url.replace('postgres://', 'postgresql://', 1)
+    app.config['SQLALCHEMY_DATABASE_URI'] = db_url
+    # 如果是 Postgres，建議開啟 sslmode=require（psycopg2 會使用此參數）
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'connect_args': {'sslmode': os.environ.get('PGSSLMODE', 'require')}
+    }
+else:
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 # Initialize Flask-Migrate
