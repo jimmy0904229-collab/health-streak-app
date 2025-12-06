@@ -12,6 +12,9 @@
         </header>
 
         <section class="feed">
+            <div style="display:flex; justify-content:flex-end; margin-bottom:8px; gap:8px; align-items:center;">
+                <a href="{{ url_for('notifications_page') }}" class="nav-item">🔔 通知{% if unread_count and unread_count>0 %} (<span id="unread-count">{{ unread_count }}</span>){% endif %}</a>
+            </div>
             {% for post in posts %}
             <article class="post" data-post-id="{{ post.id }}">
                 <div class="post-header">
@@ -55,6 +58,10 @@
                     {% endif %}
                 </div>
                 <div class="post-actions">
+                    {% if current_user.is_authenticated and current_user.username == post.username %}
+                        <a href="{{ url_for('edit_post', post_id=post.id) }}" class="btn small">編輯</a>
+                        <button class="btn small delete-post-btn" data-post-id="{{ post.id }}">刪除</button>
+                    {% endif %}
                     <button class="like-btn btn small {% if post.liked %}liked{% endif %}" data-post-id="{{ post.id }}">👍 <span class="like-count">{{ post.likes }}</span></button>
                     <button class="comment-toggle btn small" data-post-id="{{ post.id }}">💬 留言 ({{ post.comments|length }})</button>
                     <button class="share-btn btn small" data-post-id="{{ post.id }}">🔁 分享</button>
@@ -90,5 +97,15 @@
     </div>
 
     <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script>
+    // delete post via AJAX
+    document.querySelectorAll('.delete-post-btn').forEach(b=>{
+        b.addEventListener('click', ()=>{
+            if(!confirm('確定要刪除此貼文？')) return;
+            const pid = b.getAttribute('data-post-id');
+            fetch(`/post/${pid}/delete`, {method:'POST'}).then(r=>r.json()).then(j=>{ if(j.ok) location.reload(); else alert('刪除失敗') })
+        })
+    })
+    </script>
 </body>
 </html>

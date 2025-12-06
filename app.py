@@ -634,6 +634,7 @@ def index():
         posts.append({
             'id': p.id,
             'user': p.user.display_name or p.user.username,
+            'username': p.user.username,
             'avatar': p.user.avatar,
             'sport': p.sport,
             'minutes': p.minutes,
@@ -647,8 +648,15 @@ def index():
             'original': original,
             'visibility': vis
         })
+    # 未讀通知數
+    unread_count = 0
+    if current_user.is_authenticated:
+        try:
+            unread_count = Notification.query.filter_by(user_id=current_user.id, read=False).count()
+        except Exception:
+            unread_count = 0
     # 傳遞目前使用者狀態給模板
-    return render_template('index.html', status=current_user, posts=posts)
+    return render_template('index.html', status=current_user, posts=posts, unread_count=unread_count)
 
 
 @app.route('/profile', methods=['GET', 'POST'])
