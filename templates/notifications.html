@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>通知</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h2>通知</h2>
+        <button id="mark-all" class="btn small">全部標示已讀</button>
+        <ul class="notification-list">
+            {% for n in notifications %}
+                <li class="notification-item {% if not n.read %}unread{% endif %}">
+                    <div>
+                        {% if n.actor_avatar %}
+                            <img src="{{ n.actor_avatar }}" class="avatar" />
+                        {% endif %}
+                        <strong>{{ n.actor or '系統' }}</strong>
+                        {% if n.verb == 'like' %} 按讚了你的貼文
+                        {% elif n.verb == 'comment' %} 留言了你的貼文
+                        {% elif n.verb == 'share' %} 分享了你的貼文
+                        {% elif n.verb == 'mention' %} 在貼文或留言中提及了你
+                        {% else %} 有新的通知
+                        {% endif %}
+                        <div class="c-time">{{ n.created_at }}</div>
+                    </div>
+                    <div>
+                        {% if n.post_id %}<a href="{{ url_for('index') }}#post-{{ n.post_id }}">查看貼文</a>{% endif %}
+                        <button class="btn small mark-read" data-id="{{ n.id }}">標示已讀</button>
+                    </div>
+                </li>
+            {% endfor %}
+        </ul>
+    </div>
+<script>
+document.querySelectorAll('.mark-read').forEach(b=>{
+    b.addEventListener('click', ()=>{
+        const id = b.getAttribute('data-id');
+        fetch('/notifications/mark_read', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:'id='+encodeURIComponent(id)}).then(r=>r.json()).then(j=>{ if(j.ok) location.reload() })
+    })
+})
+const ma = document.getElementById('mark-all');
+ma && ma.addEventListener('click', ()=>{
+    fetch('/notifications/mark_read', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:'id=all'}).then(r=>r.json()).then(j=>{ if(j.ok) location.reload() })
+})
+</script>
+</body>
+</html>

@@ -218,6 +218,28 @@ class Like(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     __table_args__ = (db.UniqueConstraint('user_id', 'post_id', name='uix_user_post_like'),)
 
+class Notification(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)  # recipient
+    actor_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)  # who triggered
+    verb = db.Column(db.String(50), nullable=False)  # like, comment, share, mention
+    post_id = db.Column(db.Integer, db.ForeignKey('post.id'), nullable=True)
+    comment_id = db.Column(db.Integer, db.ForeignKey('comment.id'), nullable=True)
+    data = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    read = db.Column(db.Boolean, default=False)
+
+
+def create_notification(recipient_id, actor_id=None, verb='notify', post_id=None, comment_id=None, data=None):
+    try:
+        n = Notification(user_id=recipient_id, actor_id=actor_id, verb=verb, post_id=post_id, comment_id=comment_id, data=data)
+        db.session.add(n)
+        db.session.commit()
+        return True
+    except Exception:
+        db.session.rollback()
+        return False
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
@@ -250,6 +272,9 @@ def like_post():
             db.session.add(lk)
             p.likes = (p.likes or 0) + 1
             db.session.commit()
+            # create notification for post owner
+            if p.user_id and p.user_id != current_user.id:
+                create_notification(recipient_id=p.user_id, actor_id=current_user.id, verb='like', post_id=p.id)
             return jsonify({'ok': True, 'likes': p.likes, 'liked': True})
         except Exception:
             db.session.rollback()
@@ -277,6 +302,21 @@ def comment_post():
         comment = Comment(post_id=p.id, user=commenter_name, user_id=commenter_id, avatar=commenter_avatar, text=text)
         db.session.add(comment)
         db.session.commit()
+        # notify post owner if different
+        try:
+            if p.user_id and commenter_id != p.user_id:
+                create_notification(recipient_id=p.user_id, actor_id=commenter_id, verb='comment', post_id=p.id, comment_id=comment.id, data=text)
+        except Exception:
+            pass
+        # notify mentioned users in the comment text
+        try:
+            mentions = re.findall(r'@([A-Za-z0-9_\-]+)', text)
+            for uname in set(mentions):
+                u = User.query.filter_by(username=uname).first()
+                if u and u.id != commenter_id:
+                    create_notification(recipient_id=u.id, actor_id=commenter_id, verb='mention', post_id=p.id, comment_id=comment.id, data=text)
+        except Exception:
+            pass
         return jsonify({'ok': True, 'comment': {'user': comment.user, 'avatar': comment.avatar, 'text': comment.text, 'time': comment.time.strftime('%Y-%m-%d %H:%M')}})
     return jsonify({'ok': False}), 404
 
@@ -397,9 +437,19 @@ def checkin():
             image = save_uploaded_file(file)
 
         # create post (mentions will be rendered into links when displaying)
-        post = Post(user_id=current_user.id, sport=sport or None, minutes=minutes, message=message or None, image=image, visibility=visibility)
-        db.session.add(post)
-        db.session.commit()
+            post = Post(user_id=current_user.id, sport=sport or None, minutes=minutes, message=message or None, image=image, visibility=visibility)
+            db.session.add(post)
+            db.session.commit()
+            # notify mentioned users in the post message
+            try:
+                if message:
+                    mentions = re.findall(r'@([A-Za-z0-9_\-]+)', message)
+                    for uname in set(mentions):
+                        u = User.query.filter_by(username=uname).first()
+                        if u and u.id != current_user.id:
+                            create_notification(recipient_id=u.id, actor_id=current_user.id, verb='mention', post_id=post.id, data=message)
+            except Exception:
+                pass
         flash('已新增打卡貼文')
         return redirect(url_for('index'))
 
@@ -435,6 +485,12 @@ def share_post():
     newp = Post(user_id=current_user.id, sport=None, minutes=0, message=message or None, image=None, visibility='public', shared_from_id=orig.id)
     db.session.add(newp)
     db.session.commit()
+    # notify original post owner
+    try:
+        if orig.user_id and orig.user_id != current_user.id:
+            create_notification(recipient_id=orig.user_id, actor_id=current_user.id, verb='share', post_id=orig.id, data=message)
+    except Exception:
+        pass
     return jsonify({'ok': True, 'post_id': newp.id})
 
 
@@ -628,6 +684,111 @@ def profile_page():
     for p in user_posts:
         p_list.append({'id': p.id, 'sport': p.sport, 'minutes': p.minutes, 'message': p.message, 'image': p.image, 'created_at': p.created_at.strftime('%Y-%m-%d %H:%M')})
     return render_template('profile.html', profile=current_user, posts=p_list)
+
+
+@app.route('/post/<int:post_id>/edit', methods=['GET', 'POST'])
+@login_required
+def edit_post(post_id):
+    p = Post.query.get(post_id)
+    if not p:
+        flash('找不到貼文')
+        return redirect(url_for('index'))
+    if p.user_id != current_user.id:
+        flash('沒有權限')
+        return redirect(url_for('index'))
+    if request.method == 'POST':
+        message = request.form.get('message', '').strip()
+        visibility = request.form.get('visibility', 'public')
+        file = request.files.get('image')
+        if file and file.filename and allowed_file(file.filename):
+            p.image = save_uploaded_file(file)
+        p.message = message or None
+        p.visibility = visibility
+        db.session.commit()
+        flash('已更新貼文')
+        return redirect(url_for('profile_page'))
+    return render_template('edit_post.html', post=p)
+
+
+@app.route('/post/<int:post_id>/delete', methods=['POST'])
+@login_required
+def delete_post(post_id):
+    p = Post.query.get(post_id)
+    if not p:
+        return jsonify({'ok': False}), 404
+    if p.user_id != current_user.id:
+        return jsonify({'ok': False, 'error': 'no permission'}), 403
+    try:
+        # delete related comments and likes
+        Comment.query.filter_by(post_id=p.id).delete()
+        Like.query.filter_by(post_id=p.id).delete()
+        db.session.delete(p)
+        db.session.commit()
+        return jsonify({'ok': True})
+    except Exception:
+        db.session.rollback()
+        return jsonify({'ok': False}), 500
+
+
+@app.route('/delete_account', methods=['POST'])
+@login_required
+def delete_account():
+    user = User.query.get(current_user.id)
+    if not user:
+        flash('使用者不存在')
+        return redirect(url_for('index'))
+    try:
+        # delete posts, which cascade comments/likes if configured; otherwise delete manually
+        Post.query.filter_by(user_id=user.id).delete()
+        Comment.query.filter_by(user_id=user.id).delete()
+        Like.query.filter_by(user_id=user.id).delete()
+        Friend.query.filter_by(owner_id=user.id).delete()
+        # remove other users' friend references to this user
+        Friend.query.filter(Friend.friend_name == user.username).delete()
+        PendingInvite.query.filter((PendingInvite.from_user == user.username) | (PendingInvite.to_user == user.username)).delete()
+        Notification.query.filter((Notification.user_id == user.id) | (Notification.actor_id == user.id)).delete()
+        db.session.delete(user)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        flash('刪除帳號失敗')
+        return redirect(url_for('profile_page'))
+    logout_user()
+    flash('帳號已刪除')
+    return redirect(url_for('register'))
+
+
+@app.route('/notifications')
+@login_required
+def notifications_page():
+    notes = Notification.query.filter_by(user_id=current_user.id).order_by(Notification.created_at.desc()).all()
+    # build display info
+    out = []
+    for n in notes:
+        actor = User.query.get(n.actor_id) if n.actor_id else None
+        post = Post.query.get(n.post_id) if n.post_id else None
+        out.append({'id': n.id, 'verb': n.verb, 'actor': (actor.display_name or actor.username) if actor else None, 'actor_avatar': actor.avatar if actor else None, 'post_id': n.post_id, 'comment_id': n.comment_id, 'data': n.data, 'created_at': n.created_at.strftime('%Y-%m-%d %H:%M'), 'read': n.read})
+    return render_template('notifications.html', notifications=out)
+
+
+@app.route('/notifications/mark_read', methods=['POST'])
+@login_required
+def notifications_mark_read():
+    nid = request.form.get('id')
+    if nid == 'all':
+        Notification.query.filter_by(user_id=current_user.id, read=False).update({'read': True})
+        db.session.commit()
+        return jsonify({'ok': True})
+    try:
+        nid_i = int(nid)
+    except Exception:
+        return jsonify({'ok': False}), 400
+    n = Notification.query.get(nid_i)
+    if not n or n.user_id != current_user.id:
+        return jsonify({'ok': False}), 404
+    n.read = True
+    db.session.commit()
+    return jsonify({'ok': True})
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():

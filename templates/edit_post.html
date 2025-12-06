@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>編輯貼文</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h2>編輯貼文</h2>
+        <form method="POST" enctype="multipart/form-data">
+            <label>內容</label>
+            <textarea name="message" rows="4">{{ post.message or '' }}</textarea>
+            <label>圖片（選填）</label>
+            <input type="file" name="image" accept="image/*" />
+            <label>可見性</label>
+            <select name="visibility">
+                <option value="public" {% if post.visibility=='public' %}selected{% endif %}>公開</option>
+                <option value="friends" {% if post.visibility=='friends' %}selected{% endif %}>僅好友</option>
+            </select>
+            <button type="submit" class="btn">儲存</button>
+        </form>
+    </div>
+</body>
+</html>
