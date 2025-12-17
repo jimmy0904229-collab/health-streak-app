@@ -321,6 +321,7 @@ def comment_post():
     return jsonify({'ok': False}), 404
 
 from sqlalchemy import case, and_
+from sqlalchemy import or_
 import re
 
 
@@ -723,45 +724,64 @@ def edit_post(post_id):
 def delete_post(post_id):
     p = Post.query.get(post_id)
     if not p:
-        return jsonify({'ok': False}), 404
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.is_json:
+            return jsonify({'ok': False}), 404
+        flash('找不到貼文')
+        return redirect(url_for('index'))
     if p.user_id != current_user.id:
-        return jsonify({'ok': False, 'error': 'no permission'}), 403
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.is_json:
+            return jsonify({'ok': False, 'error': 'no permission'}), 403
+        flash('沒有權限刪除該貼文')
+        return redirect(url_for('index'))
     try:
         # delete related comments and likes
         Comment.query.filter_by(post_id=p.id).delete()
         Like.query.filter_by(post_id=p.id).delete()
         db.session.delete(p)
         db.session.commit()
-        return jsonify({'ok': True})
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.is_json:
+            return jsonify({'ok': True})
+        flash('貼文已刪除')
+        return redirect(url_for('profile_page'))
     except Exception:
         db.session.rollback()
-        return jsonify({'ok': False}), 500
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.is_json:
+            return jsonify({'ok': False}), 500
+        flash('刪除貼文失敗')
+        return redirect(url_for('profile_page'))
 
 
 @app.route('/delete_account', methods=['POST'])
 @login_required
 def delete_account():
-    user = User.query.get(current_user.id)
-    if not user:
-        flash('使用者不存在')
-        return redirect(url_for('index'))
+    # copy info we need then logout to avoid deleting object referenced by flask-login
+    uid = current_user.id
+    uname = current_user.username
     try:
-        # delete posts, which cascade comments/likes if configured; otherwise delete manually
-        Post.query.filter_by(user_id=user.id).delete()
-        Comment.query.filter_by(user_id=user.id).delete()
-        Like.query.filter_by(user_id=user.id).delete()
-        Friend.query.filter_by(owner_id=user.id).delete()
-        # remove other users' friend references to this user
-        Friend.query.filter(Friend.friend_name == user.username).delete()
-        PendingInvite.query.filter((PendingInvite.from_user == user.username) | (PendingInvite.to_user == user.username)).delete()
-        Notification.query.filter((Notification.user_id == user.id) | (Notification.actor_id == user.id)).delete()
-        db.session.delete(user)
+        logout_user()
+    except Exception:
+        pass
+
+    try:
+        # delete user's posts, comments, likes
+        Post.query.filter_by(user_id=uid).delete()
+        Comment.query.filter_by(user_id=uid).delete()
+        Like.query.filter_by(user_id=uid).delete()
+        # delete friend relations owned by user and references to user's username
+        Friend.query.filter_by(owner_id=uid).delete()
+        Friend.query.filter(Friend.friend_name == uname).delete()
+        # pending invites involving this user
+        PendingInvite.query.filter(or_(PendingInvite.from_user == uname, PendingInvite.to_user == uname)).delete()
+        # notifications where user is recipient or actor
+        Notification.query.filter(or_(Notification.user_id == uid, Notification.actor_id == uid)).delete()
+        # finally delete user row
+        User.query.filter_by(id=uid).delete()
         db.session.commit()
     except Exception:
         db.session.rollback()
         flash('刪除帳號失敗')
         return redirect(url_for('profile_page'))
-    logout_user()
+
     flash('帳號已刪除')
     return redirect(url_for('register'))
 
