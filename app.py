@@ -891,6 +891,7 @@ def index():
             'message': p.message,
             'message_html': msg_html,
             'image': p.image,
+            'pinned_badge': pinned_badge,
             'created_at': p.created_at.strftime('%Y-%m-%d %H:%M'),
             'likes': p.likes,
             'liked': liked_flag,
@@ -912,32 +913,8 @@ def index():
 @app.route('/profile', methods=['GET', 'POST'])
 @login_required
 def profile_page():
-    # 顯示與更新目前使用者的個人設定
-    if request.method == 'POST':
-        display = request.form.get('display_name', '').strip()
-        notify = request.form.get('notify', 'off') == 'on'
-        try:
-            sd = int(request.form.get('streak_days', current_user.streak_days or 0))
-        except Exception:
-            sd = current_user.streak_days or 0
-
-        if display:
-            current_user.display_name = display
-        current_user.notify = notify
-        current_user.streak_days = sd
-
-        # 處理上傳大頭貼
-        file = request.files.get('avatar')
-        if file and file.filename and allowed_file(file.filename):
-            current_user.avatar = save_uploaded_file(file)
-
-        db.session.commit()
-        flash('個人設定已更新')
-        return redirect(url_for('profile_page'))
-
-    # also show user's own posts
+    # 顯示目前使用者的個人資料與貼文（設定移至 /settings）
     user_posts = Post.query.filter_by(user_id=current_user.id).order_by(Post.created_at.desc()).all()
-    # build simple post dicts for profile
     p_list = []
     for p in user_posts:
         p_list.append({'id': p.id, 'sport': p.sport, 'minutes': p.minutes, 'message': p.message, 'image': p.image, 'created_at': p.created_at.strftime('%Y-%m-%d %H:%M')})
@@ -1083,6 +1060,35 @@ def notifications_page():
         post = Post.query.get(n.post_id) if n.post_id else None
         out.append({'id': n.id, 'verb': n.verb, 'actor': (actor.display_name or actor.username) if actor else None, 'actor_avatar': actor.avatar if actor else None, 'post_id': n.post_id, 'comment_id': n.comment_id, 'data': n.data, 'created_at': n.created_at.strftime('%Y-%m-%d %H:%M'), 'read': n.read})
     return render_template('notifications.html', notifications=out)
+
+
+@app.route('/settings', methods=['GET', 'POST'])
+@login_required
+def settings_page():
+    # Move user settings here: display name, streak days, notify, avatar upload
+    if request.method == 'POST':
+        display = request.form.get('display_name', '').strip()
+        notify = request.form.get('notify', 'off') == 'on'
+        try:
+            sd = int(request.form.get('streak_days', current_user.streak_days or 0))
+        except Exception:
+            sd = current_user.streak_days or 0
+
+        if display:
+            current_user.display_name = display
+        current_user.notify = notify
+        current_user.streak_days = sd
+
+        # handle avatar upload
+        file = request.files.get('avatar')
+        if file and file.filename and allowed_file(file.filename):
+            current_user.avatar = save_uploaded_file(file)
+
+        db.session.commit()
+        flash('個人設定已更新')
+        return redirect(url_for('settings_page'))
+
+    return render_template('settings.html', profile=current_user)
 
 
 @app.route('/badge/pin', methods=['POST'])

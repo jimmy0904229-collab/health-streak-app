@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>設定</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+    .settings-card { max-width:600px; margin:0 auto }
+    </style>
+</head>
+<body>
+    <div class="container settings-card">
+        <h2>個人設定</h2>
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            <div class="flash">{{ messages[0] }}</div>
+          {% endif %}
+        {% endwith %}
+        <form method="POST" enctype="multipart/form-data">
+            <label>顯示名稱：</label>
+            <input type="text" name="display_name" value="{{ profile.display_name }}">
+            <label>連續運動天數：</label>
+            <input type="number" name="streak_days" min="0" value="{{ profile.streak_days }}">
+            <label><input type="checkbox" name="notify" {% if profile.notify %}checked{% endif %}> 接收通知</label>
+            <label>上傳大頭貼：</label>
+            <input type="file" name="avatar" accept="image/*">
+            <div style="margin-top:12px;">
+                <button type="submit" class="btn">儲存設定</button>
+            </div>
+        </form>
+
+        <hr>
+        <h3>帳號管理</h3>
+        <p>刪除帳號會移除所有個人資料與貼文，此動作不可復原。</p>
+        <form method="POST" action="{{ url_for('delete_account') }}" onsubmit="return confirm('確定要刪除帳號？此動作不可復原。');">
+            <button type="submit" class="btn" style="background:#e74c3c;">刪除帳號</button>
+        </form>
+        <p style="margin-top:12px;"><a href="{{ url_for('profile_page') }}">回到個人主頁</a></p>
+    </div>
+
+    <!-- Bottom nav -->
+    <div class="bottom-nav">
+        <a href="{{ url_for('index') }}" class="nav-item">首頁</a>
+        <a href="{{ url_for('friends_page') }}" class="nav-item">好友</a>
+        <a href="{{ url_for('profile_page') }}" class="nav-item">個人</a>
+        <a href="{{ url_for('checkin') }}" class="nav-item checkin-btn">打卡</a>
+        <a href="{{ url_for('leaderboard_page') }}" class="nav-item">排行榜</a>
+        <a href="{{ url_for('stats') }}" class="nav-item">分析</a>
+        <a href="{{ url_for('badges_page') }}" class="nav-item">徽章</a>
+    </div>
+</body>
+</html>

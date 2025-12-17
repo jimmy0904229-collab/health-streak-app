@@ -45,28 +45,12 @@
             <p>尚未獲得徽章</p>
             {% endif %}
         </div>
-
         <div class="profile-settings">
             <h3>個人設定</h3>
-                        <p style="text-align:center;"><a href="{{ url_for('logout') }}" class="btn">登出</a></p>
-                        <form method="POST" action="{{ url_for('delete_account') }}" onsubmit="return confirm('確定要刪除帳號？此動作不可復原。');" style="text-align:center; margin-top:8px;">
-                            <button type="submit" class="btn" style="background:#e74c3c;">刪除帳號</button>
-                        </form>
-            {% with messages = get_flashed_messages() %}
-              {% if messages %}
-                <div class="flash">{{ messages[0] }}</div>
-              {% endif %}
-            {% endwith %}
-            <form method="POST" enctype="multipart/form-data">
-                <label>顯示名稱：</label>
-                <input type="text" name="display_name" value="{{ profile.display_name }}">
-                <label>連續運動天數：</label>
-                <input type="number" name="streak_days" min="0" value="{{ profile.streak_days }}">
-                <label><input type="checkbox" name="notify" {% if profile.notify %}checked{% endif %}> 接收通知</label>
-                <label>上傳大頭貼：</label>
-                <input type="file" name="avatar" accept="image/*">
-                <button type="submit" class="btn">儲存設定</button>
-            </form>
+            <p style="text-align:center;">
+                <a href="{{ url_for('settings_page') }}" class="btn">編輯設定</a>
+                <a href="{{ url_for('logout') }}" class="btn">登出</a>
+            </p>
         </div>
 
         <div class="profile-posts">

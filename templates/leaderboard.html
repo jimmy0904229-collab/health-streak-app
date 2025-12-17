@@ -33,17 +33,7 @@
             </tr>
             {% endfor %}
         </table>
-        <div class="badge-section">
-            <h3>徽章</h3>
-            <ul>
-                {% for badge in badges %}
-                <li class="badge {% if badge.achieved %}achieved{% endif %}">
-                    <span>{{ badge.title }}</span> - <small>{{ badge.desc }}</small>
-                    {% if badge.achieved %}<span class="badge-icon">🏅</span>{% endif %}
-                </li>
-                {% endfor %}
-            </ul>
-        </div>
+        <!-- Badges removed from leaderboard page per UI change request -->
         <a href="{{ url_for('index') }}" class="btn">回首頁</a>
     </div>
 
