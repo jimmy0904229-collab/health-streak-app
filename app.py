@@ -655,6 +655,17 @@ def checkin():
 
         # create post (mentions will be rendered into links when displaying)
         post = Post(user_id=current_user.id, sport=sport or None, minutes=minutes, message=message or None, image=image, visibility=visibility)
+        # optional: accept date/time fields from form to override created_at
+        date_str = request.form.get('date')
+        time_str = request.form.get('time')
+        if date_str and time_str:
+            try:
+                # expected formats: YYYY-MM-DD and HH:MM
+                dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
+                post.created_at = dt
+            except Exception:
+                # ignore parse errors and use default created_at
+                pass
         db.session.add(post)
         # update user's streak_days (simple logic: increment if checked-in today; external logic may vary)
         try:
@@ -680,7 +691,11 @@ def checkin():
         flash('已新增打卡貼文')
         return redirect(url_for('index'))
 
-    return render_template('checkin.html')
+    # prepare defaults for date/time inputs
+    now = datetime.utcnow()
+    default_date = now.strftime('%Y-%m-%d')
+    default_time = now.strftime('%H:%M')
+    return render_template('checkin.html', default_date=default_date, default_time=default_time)
 
 
 @app.route('/friends/search')

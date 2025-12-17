@@ -37,6 +37,10 @@
             <input type="text" name="sport" required>
             <label>運動時間（分鐘）：</label>
             <input type="number" name="minutes" min="1" required>
+            <label>運動發生日期：</label>
+            <input type="date" name="date" value="{{ default_date if default_date is defined else '' }}" class="input-small">
+            <label>運動發生時間：</label>
+            <input type="time" name="time" value="{{ default_time if default_time is defined else '' }}" class="input-small">
             <label>貼文可見範圍：</label>
             <select name="visibility" class="input-small">
                 <option value="public">對所有人公開</option>

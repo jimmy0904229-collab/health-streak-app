@@ -37,6 +37,16 @@
                         <strong class="post-user">{{ post.user }}</strong>
                     </div>
                     <span class="post-time">{{ post.created_at }}</span>
+                    <!-- post menu (edit/delete) -->
+                    {% if current_user.is_authenticated and current_user.username == post.username %}
+                    <div class="post-menu" data-post-id="{{ post.id }}">
+                        <button class="post-menu-btn" aria-label="更多選項">⋯</button>
+                        <ul class="post-menu-list" style="display:none;">
+                            <li class="post-menu-edit"><a href="{{ url_for('edit_post', post_id=post.id) }}">編輯</a></li>
+                            <li class="post-menu-delete"><button class="post-menu-delete-btn">刪除</button></li>
+                        </ul>
+                    </div>
+                    {% endif %}
                 </div>
                 <div class="post-body">
                     <p><strong>{{ post.sport }}</strong> • {{ post.minutes }} 分鐘</p>
@@ -66,8 +76,7 @@
                 </div>
                 <div class="post-actions">
                     {% if current_user.is_authenticated and current_user.username == post.username %}
-                        <a href="{{ url_for('edit_post', post_id=post.id) }}" class="btn small">編輯</a>
-                        <button class="btn small delete-post-btn" data-post-id="{{ post.id }}">刪除</button>
+                        <!-- 編輯/刪除已移至右上角選單 -->
                     {% endif %}
                     <button class="like-btn btn small {% if post.liked %}liked{% endif %}" data-post-id="{{ post.id }}">👍 <span class="like-count">{{ post.likes }}</span></button>
                     <button class="comment-toggle btn small" data-post-id="{{ post.id }}">💬 留言 ({{ post.comments|length }})</button>
@@ -80,7 +89,6 @@
                         {% endfor %}
                     </ul>
                     <form class="comment-form" data-post-id="{{ post.id }}">
-                        <input type="text" name="user" placeholder="你的名稱（選填）" class="input-small">
                         <input type="text" name="text" placeholder="寫下你的留言..." required class="input-small">
                         <button type="submit" class="btn small">送出</button>
                     </form>
@@ -105,7 +113,39 @@
 
     <script src="{{ url_for('static', filename='app.js') }}"></script>
     <script>
-    // delete post via AJAX
+    // post menu toggle and delete handling
+    document.querySelectorAll('.post-menu-btn').forEach(btn=>{
+        btn.addEventListener('click', (e)=>{
+            e.stopPropagation();
+            const menu = btn.parentElement.querySelector('.post-menu-list');
+            if(!menu) return;
+            // toggle visibility
+            menu.style.display = (menu.style.display === 'none' || !menu.style.display) ? 'block' : 'none';
+        })
+    })
+
+    // close menus when clicking outside
+    document.addEventListener('click', ()=>{
+        document.querySelectorAll('.post-menu-list').forEach(m=> m.style.display='none');
+    })
+
+    // handle delete from menu buttons
+    document.querySelectorAll('.post-menu-delete-btn').forEach(b=>{
+        b.addEventListener('click', (e)=>{
+            e.preventDefault();
+            e.stopPropagation();
+            if(!confirm('確定要刪除此貼文？')) return;
+            const menu = b.closest('.post-menu');
+            const pid = menu && menu.getAttribute('data-post-id');
+            if(!pid) return alert('找不到貼文 id');
+            fetch(`/post/${pid}/delete`, {method:'POST'}).then(r=>{
+                if(r.status===200) return r.json();
+                throw new Error('Network');
+            }).then(j=>{ if(j.ok) location.reload(); else alert('刪除失敗') }).catch(()=>alert('刪除失敗'))
+        })
+    })
+
+    // keep support for legacy inline delete buttons if present
     document.querySelectorAll('.delete-post-btn').forEach(b=>{
         b.addEventListener('click', ()=>{
             if(!confirm('確定要刪除此貼文？')) return;

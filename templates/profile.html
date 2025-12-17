@@ -57,18 +57,24 @@
             <h3>我的貼文</h3>
             {% for p in posts %}
                 <div class="post">
-                    <div class="post-header">
+                    <div class="post-header" style="position:relative;">
                         <strong>{{ p.created_at }}</strong>
+                        {% if current_user.is_authenticated and current_user.id == profile.id %}
+                        <div class="post-menu" data-post-id="{{ p.id }}">
+                            <button class="post-menu-btn" aria-label="更多選項">⋯</button>
+                            <ul class="post-menu-list" style="display:none;">
+                                <li class="post-menu-edit"><a href="{{ url_for('edit_post', post_id=p.id) }}">編輯</a></li>
+                                <li class="post-menu-delete"><button class="post-menu-delete-btn">刪除</button></li>
+                            </ul>
+                        </div>
+                        {% endif %}
                     </div>
                     <div class="post-body">
                         <p><strong>{{ p.sport }}</strong> • {{ p.minutes }} 分鐘</p>
                         {% if p.message %}<p>{{ p.message }}</p>{% endif %}
                         {% if p.image %}<img src="{{ p.image }}" class="post-image" style="max-width:200px;">{% endif %}
                         <div style="margin-top:6px;">
-                            <a href="{{ url_for('edit_post', post_id=p.id) }}" class="btn small">編輯</a>
-                            <form style="display:inline-block;" onsubmit="return confirm('確定刪除？');" method="POST" action="{{ url_for('delete_post', post_id=p.id) }}">
-                                <button type="submit" class="btn small" style="background:#e74c3c;">刪除</button>
-                            </form>
+                            <!-- actions moved to top-right menu -->
                         </div>
                     </div>
                 </div>
@@ -105,6 +111,34 @@
                 }
             })
         }
+    })
+    </script>
+    <script>
+    // post menu toggle and delete handling (for profile posts)
+    document.querySelectorAll('.post-menu-btn').forEach(btn=>{
+        btn.addEventListener('click', (e)=>{
+            e.stopPropagation();
+            const menu = btn.parentElement.querySelector('.post-menu-list');
+            if(!menu) return;
+            menu.style.display = (menu.style.display === 'none' || !menu.style.display) ? 'block' : 'none';
+        })
+    })
+    document.addEventListener('click', ()=>{
+        document.querySelectorAll('.post-menu-list').forEach(m=> m.style.display='none');
+    })
+    document.querySelectorAll('.post-menu-delete-btn').forEach(b=>{
+        b.addEventListener('click', (e)=>{
+            e.preventDefault();
+            e.stopPropagation();
+            if(!confirm('確定要刪除此貼文？')) return;
+            const menu = b.closest('.post-menu');
+            const pid = menu && menu.getAttribute('data-post-id');
+            if(!pid) return alert('找不到貼文 id');
+            fetch(`/post/${pid}/delete`, {method:'POST'}).then(r=>{
+                if(r.status===200) return r.json();
+                throw new Error('Network');
+            }).then(j=>{ if(j.ok) location.reload(); else alert('刪除失敗') }).catch(()=>alert('刪除失敗'))
+        })
     })
     </script>
 </body>

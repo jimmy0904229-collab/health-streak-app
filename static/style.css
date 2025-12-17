@@ -111,6 +111,13 @@ button[type="submit"] {
 .feed { margin-top: 18px; }
 .post { border: 1px solid #eef6ff; padding: 12px; border-radius: 8px; margin-bottom: 12px; background: #fff; }
 .post-header { display:flex; justify-content:space-between; margin-bottom:8px; }
+/* post menu (three-dot) */
+.post-menu { position: absolute; right: 8px; top: 8px; }
+.post-menu-btn { background: transparent; border: none; font-size: 18px; cursor: pointer; padding: 4px 8px; }
+.post-menu-list { position: absolute; right: 0; top: 28px; background: #fff; border: 1px solid #e6f0ff; list-style: none; padding: 6px 0; margin: 0; border-radius: 6px; box-shadow: 0 6px 20px rgba(0,0,0,0.08); min-width: 120px; z-index: 50; }
+.post-menu-list li { padding: 6px 12px; }
+.post-menu-list li button, .post-menu-list li a { background: none; border: none; width: 100%; text-align: left; color: #2d5be3; text-decoration: none; cursor: pointer; }
+.post-menu-list li button:hover, .post-menu-list li a:hover { background:#f6fbff; }
 .post-image { width:100%; aspect-ratio: 1/1; object-fit:cover; border-radius:8px; margin-top:8px; }
 .post-message { margin:8px 0; background:#f6fbff; padding:10px; border-radius:6px; border:1px solid #e6f4ff; }
 .post-actions { margin-top:8px; display:flex; gap:8px; }
