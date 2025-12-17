@@ -8,18 +8,45 @@
 <body>
     <div class="container">
         <h2>編輯貼文</h2>
-        <form method="POST" enctype="multipart/form-data">
-            <label>內容</label>
-            <textarea name="message" rows="4">{{ post.message or '' }}</textarea>
-            <label>圖片（選填）</label>
-            <input type="file" name="image" accept="image/*" />
-            <label>可見性</label>
-            <select name="visibility">
-                <option value="public" {% if post.visibility=='public' %}selected{% endif %}>公開</option>
-                <option value="friends" {% if post.visibility=='friends' %}selected{% endif %}>僅好友</option>
+        <form method="POST" enctype="multipart/form-data" class="form-card">
+            <label>運動名稱：</label>
+            <input type="text" name="sport" value="{{ post.sport or '' }}">
+            <label>運動時間（分鐘）：</label>
+            <input type="number" name="minutes" min="1" value="{{ post.minutes or 0 }}">
+            <label>發生日期（台北時區）：</label>
+            <input type="date" name="date" value="{{ default_date if default_date is defined else '' }}" class="input-small">
+            <label>發生時間（台北時區）：</label>
+            <input type="time" name="time" value="{{ default_time if default_time is defined else '' }}" class="input-small">
+            <label>貼文內容（可加上感想或註記）：</label>
+            <textarea name="message" rows="4" style="width:100%; padding:8px; border-radius:4px; border:1px solid #dbeafe;">{{ post.message or '' }}</textarea>
+            <label>上傳/替換照片：</label>
+            {% if post.image %}
+                <div style="margin-bottom:8px;"><img src="{{ post.image }}" style="max-width:200px; display:block; margin-bottom:6px;"></div>
+            {% endif %}
+            <input type="file" name="image" accept="image/*" onchange="previewEditImage(event)">
+            <img id="edit-img-preview" style="display:none;max-width:200px;margin-top:10px;">
+            <label>貼文可見範圍：</label>
+            <select name="visibility" class="input-small">
+                <option value="public" {% if post.visibility=='public' %}selected{% endif %}>對所有人公開</option>
+                <option value="friends" {% if post.visibility=='friends' %}selected{% endif %}>僅好友可見</option>
             </select>
-            <button type="submit" class="btn">儲存</button>
+            <div style="margin-top:12px; display:flex; gap:8px;">
+                <button type="submit" class="btn">儲存變更</button>
+                <a href="{{ url_for('profile_page') }}" class="btn">取消</a>
+            </div>
         </form>
     </div>
+
+    <script>
+        function previewEditImage(event){
+            const reader = new FileReader();
+            reader.onload = function(){
+                const output = document.getElementById('edit-img-preview');
+                output.src = reader.result;
+                output.style.display = 'block';
+            };
+            reader.readAsDataURL(event.target.files[0]);
+        }
+    </script>
 </body>
 </html>

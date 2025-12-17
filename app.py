@@ -1013,17 +1013,50 @@ def edit_post(post_id):
         flash('沒有權限')
         return redirect(url_for('index'))
     if request.method == 'POST':
+        # update sport/minutes/message/visibility/image and optional date/time
+        sport = request.form.get('sport', '').strip()
+        try:
+            minutes = int(request.form.get('minutes', 0))
+        except Exception:
+            minutes = 0
         message = request.form.get('message', '').strip()
         visibility = request.form.get('visibility', 'public')
+        # handle optional image replacement
         file = request.files.get('image')
         if file and file.filename and allowed_file(file.filename):
             p.image = save_uploaded_file(file)
+
+        # parse date/time fields (assume Asia/Taipei local)
+        date_str = request.form.get('date')
+        time_str = request.form.get('time')
+        if date_str and time_str:
+            try:
+                local_dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
+                local_dt = local_dt.replace(tzinfo=ZoneInfo('Asia/Taipei'))
+                utc_dt = local_dt.astimezone(timezone.utc)
+                # store naive UTC
+                p.created_at = utc_dt.replace(tzinfo=None)
+            except Exception:
+                pass
+
+        p.sport = sport or None
+        p.minutes = minutes
         p.message = message or None
         p.visibility = visibility
         db.session.commit()
         flash('已更新貼文')
         return redirect(url_for('profile_page'))
-    return render_template('edit_post.html', post=p)
+
+    # prepare defaults for date/time inputs based on post created_at (convert to Taipei)
+    try:
+        local_tz = ZoneInfo('Asia/Taipei')
+        local_dt = p.created_at.replace(tzinfo=timezone.utc).astimezone(local_tz)
+        default_date = local_dt.strftime('%Y-%m-%d')
+        default_time = local_dt.strftime('%H:%M')
+    except Exception:
+        default_date = ''
+        default_time = ''
+    return render_template('edit_post.html', post=p, default_date=default_date, default_time=default_time)
 
 
 @app.route('/post/<int:post_id>/delete', methods=['POST'])
