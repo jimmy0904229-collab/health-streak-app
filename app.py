@@ -19,7 +19,11 @@ app.secret_key = 'your_secret_key'  # 用於 flash 訊息
 UPLOAD_FOLDER = 'static/uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+BADGE_FOLDER = 'static/badges'
+os.makedirs(BADGE_FOLDER, exist_ok=True)
+app.config['BADGE_FOLDER'] = BADGE_FOLDER
+
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'svg'}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -181,9 +185,13 @@ class Leaderboard(db.Model):
 
 class Badge(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    # Badge metadata (static)
     title = db.Column(db.String(80), nullable=False)
     desc = db.Column(db.String(200), nullable=False)
-    achieved = db.Column(db.Boolean, default=False)
+    slug = db.Column(db.String(80), unique=True, nullable=False)
+    image_filename = db.Column(db.String(300), nullable=True)
+    criteria_json = db.Column(db.Text, nullable=True)
+    is_active = db.Column(db.Boolean, default=True)
 
 # 定義 UserStatus 和 RecentActivity 資料模型
 class UserStatus(db.Model):
@@ -230,6 +238,17 @@ class Notification(db.Model):
     read = db.Column(db.Boolean, default=False)
 
 
+# association: which user earned which badge
+class UserBadge(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    badge_id = db.Column(db.Integer, db.ForeignKey('badge.id'), nullable=False)
+    earned_at = db.Column(db.DateTime, default=datetime.utcnow)
+    pinned = db.Column(db.Boolean, default=False)
+    user = db.relationship('User', backref=db.backref('user_badges', lazy=True))
+    badge = db.relationship('Badge', backref=db.backref('earned_by', lazy=True))
+
+
 def create_notification(recipient_id, actor_id=None, verb='notify', post_id=None, comment_id=None, data=None):
     try:
         n = Notification(user_id=recipient_id, actor_id=actor_id, verb=verb, post_id=post_id, comment_id=comment_id, data=data)
@@ -244,6 +263,14 @@ def create_notification(recipient_id, actor_id=None, verb='notify', post_id=None
 def load_user(user_id):
     return User.query.get(int(user_id))
  
+# Admin helper: simple username-based admin check (configure ADMIN_USERNAMES env var comma-separated)
+def is_admin_user():
+    if not current_user or not getattr(current_user, 'is_authenticated', False):
+        return False
+    admin_list = os.environ.get('ADMIN_USERNAMES', 'admin')
+    admins = [a.strip() for a in admin_list.split(',') if a.strip()]
+    return current_user.username in admins
+
 
 
 @app.route('/like', methods=['POST'])
@@ -275,6 +302,12 @@ def like_post():
             # create notification for post owner
             if p.user_id and p.user_id != current_user.id:
                 create_notification(recipient_id=p.user_id, actor_id=current_user.id, verb='like', post_id=p.id)
+            # award like-count-based badges for post owner
+            try:
+                if p.user_id and p.user_id != current_user.id:
+                    run_award_checks_on_user(p.user_id)
+            except Exception:
+                pass
             return jsonify({'ok': True, 'likes': p.likes, 'liked': True})
         except Exception:
             db.session.rollback()
@@ -308,6 +341,12 @@ def comment_post():
                 create_notification(recipient_id=p.user_id, actor_id=commenter_id, verb='comment', post_id=p.id, comment_id=comment.id, data=text)
         except Exception:
             pass
+        # award comment-count-based badges for post owner
+        try:
+            if p.user_id and p.user_id != commenter_id:
+                run_award_checks_on_user(p.user_id)
+        except Exception:
+            pass
         # notify mentioned users in the comment text
         try:
             mentions = re.findall(r'@([A-Za-z0-9_\-]+)', text)
@@ -324,6 +363,126 @@ from sqlalchemy import case, and_
 from sqlalchemy import or_
 from sqlalchemy import text
 import re
+
+
+# --- Badge awarding helpers ---
+BADGE_DEFINITIONS = {
+    'streak_3': {'title': '3 Day Streak', 'desc': 'Complete 3 consecutive check-ins', 'slug': 'streak_3', 'image_files': ['3 day.png']},
+    'streak_7': {'title': '7 Day Streak', 'desc': 'Complete 7 consecutive check-ins', 'slug': 'streak_7', 'image_files': ['7 day.png']},
+    'hours_50': {'title': '50 Hours', 'desc': 'Accumulate 50 hours of activity', 'slug': 'hours_50', 'image_files': ['50 hour.png']},
+    'hours_100': {'title': '100 Hours', 'desc': 'Accumulate 100 hours of activity', 'slug': 'hours_100', 'image_files': ['100hour.png']},
+    'hours_500': {'title': '500 Hours', 'desc': 'Accumulate 500 hours of activity', 'slug': 'hours_500', 'image_files': ['500 hour.png']},
+    'comments_5': {'title': '5 Comments', 'desc': 'Receive 5 comments on your posts', 'slug': 'comments_5', 'image_files': ['5com.png']},
+    'likes_10': {'title': '10 Likes', 'desc': 'Receive 10 likes on your posts', 'slug': 'likes_10', 'image_files': ['10good.png']},
+    'friends_3': {'title': '3 Friends', 'desc': 'Have 3 friends', 'slug': 'friends_3', 'image_files': ['3friend.png']},
+    'friends_10': {'title': '10 Friends', 'desc': 'Have 10 friends', 'slug': 'friends_10', 'image_files': ['10friend.png']},
+}
+
+
+def ensure_badge_record(slug):
+    """Ensure a Badge record exists for given slug; create it using BADGE_DEFINITIONS and any matching image in static/badges."""
+    if slug not in BADGE_DEFINITIONS:
+        return None
+    bdef = BADGE_DEFINITIONS[slug]
+    b = Badge.query.filter_by(slug=bdef['slug']).first()
+    if b:
+        return b
+    # find image file in static/badges
+    img = None
+    for fname in bdef.get('image_files', []):
+        candidate = os.path.join(app.config.get('BADGE_FOLDER', 'static/badges'), fname)
+        if os.path.exists(candidate):
+            img = fname
+            break
+    # create badge
+    try:
+        b = Badge(title=bdef['title'], desc=bdef['desc'], slug=bdef['slug'], image_filename=img, is_active=True)
+        db.session.add(b)
+        db.session.commit()
+        return b
+    except Exception:
+        db.session.rollback()
+        return Badge.query.filter_by(slug=bdef['slug']).first()
+
+
+def award_badge_if_needed(user_id, slug):
+    if not user_id:
+        return False
+    b = Badge.query.filter_by(slug=slug).first()
+    if not b:
+        b = ensure_badge_record(slug)
+    if not b:
+        return False
+    # check if already awarded
+    exists = UserBadge.query.filter_by(user_id=user_id, badge_id=b.id).first()
+    if exists:
+        return False
+    try:
+        ub = UserBadge(user_id=user_id, badge_id=b.id)
+        db.session.add(ub)
+        db.session.commit()
+        return True
+    except Exception:
+        db.session.rollback()
+        return False
+
+
+def run_award_checks_on_user(user_id):
+    """Run all badge checks for a user (id). Uses posts/comments/likes/friends/streak/minutes thresholds."""
+    u = User.query.get(user_id)
+    if not u:
+        return
+    # ensure badge records exist
+    for slug in BADGE_DEFINITIONS.keys():
+        ensure_badge_record(slug)
+
+    # 1) streak badges
+    try:
+        sd = int(getattr(u, 'streak_days', 0) or 0)
+        if sd >= 3:
+            award_badge_if_needed(user_id, 'streak_3')
+        if sd >= 7:
+            award_badge_if_needed(user_id, 'streak_7')
+    except Exception:
+        pass
+
+    # 2) cumulative minutes -> hours
+    try:
+        total_minutes = db.session.query(db.func.coalesce(db.func.sum(Post.minutes), 0)).filter(Post.user_id == user_id).scalar() or 0
+        if total_minutes >= 50 * 60:
+            award_badge_if_needed(user_id, 'hours_50')
+        if total_minutes >= 100 * 60:
+            award_badge_if_needed(user_id, 'hours_100')
+        if total_minutes >= 500 * 60:
+            award_badge_if_needed(user_id, 'hours_500')
+    except Exception:
+        pass
+
+    # 3) comments received on user's posts
+    try:
+        post_ids = [r[0] for r in db.session.query(Post.id).filter(Post.user_id == user_id).all()]
+        comment_count = 0
+        like_count = 0
+        if post_ids:
+            comment_count = db.session.query(db.func.count(Comment.id)).filter(Comment.post_id.in_(post_ids)).scalar() or 0
+            like_count = db.session.query(db.func.count(Like.id)).filter(Like.post_id.in_(post_ids)).scalar() or 0
+        if comment_count >= 5:
+            award_badge_if_needed(user_id, 'comments_5')
+        if like_count >= 10:
+            award_badge_if_needed(user_id, 'likes_10')
+    except Exception:
+        pass
+
+    # 4) friend counts
+    try:
+        friend_count = Friend.query.filter_by(owner_id=user_id).count()
+        if friend_count >= 3:
+            award_badge_if_needed(user_id, 'friends_3')
+        if friend_count >= 10:
+            award_badge_if_needed(user_id, 'friends_10')
+    except Exception:
+        pass
+
 
 
 @app.route('/leaderboard')
@@ -370,8 +529,64 @@ def leaderboard_page():
 
 @app.route('/badges')
 def badges_page():
-    badges = Badge.query.all()
-    return render_template('badges.html', badges=badges)
+    badges = Badge.query.filter_by(is_active=True).all()
+    user_badge_ids = set()
+    if current_user.is_authenticated:
+        ub = UserBadge.query.filter_by(user_id=current_user.id).all()
+        user_badge_ids = set([u.badge_id for u in ub])
+
+    # build badge display info
+    badge_list = []
+    for b in badges:
+        img_url = None
+        if b.image_filename:
+            img_url = url_for('static', filename=f'badges/{b.image_filename}')
+        badge_list.append({'id': b.id, 'title': b.title, 'desc': b.desc, 'slug': b.slug, 'image': img_url, 'earned': (b.id in user_badge_ids)})
+
+    return render_template('badges.html', badges=badge_list)
+
+
+@app.route('/admin/badges', methods=['GET', 'POST'])
+@login_required
+def admin_badges():
+    if not is_admin_user():
+        flash('沒有權限')
+        return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        title = request.form.get('title', '').strip()
+        desc = request.form.get('desc', '').strip()
+        slug = request.form.get('slug', '').strip() or (title.replace(' ', '_').lower() if title else '')
+        file = request.files.get('image')
+        image_filename = None
+        if file and file.filename and allowed_file(file.filename):
+            fn = secure_filename(file.filename)
+            unique = f"{uuid.uuid4().hex}_{fn}"
+            dest = os.path.join(app.config.get('BADGE_FOLDER', 'static/badges'), unique)
+            # ensure folder
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            file.stream.seek(0)
+            file.save(dest)
+            image_filename = unique
+
+        # create badge record
+        try:
+            b = Badge(title=title or (slug or 'unnamed'), desc=desc or '', slug=slug or str(uuid.uuid4().hex), image_filename=image_filename, is_active=True)
+            db.session.add(b)
+            db.session.commit()
+            flash('徽章已新增')
+            return redirect(url_for('admin_badges'))
+        except Exception:
+            db.session.rollback()
+            flash('新增徽章失敗')
+
+    # GET: list badges
+    badges = Badge.query.order_by(Badge.id.desc()).all()
+    badge_list = []
+    for b in badges:
+        img_url = url_for('static', filename=f'badges/{b.image_filename}') if b.image_filename else None
+        badge_list.append({'id': b.id, 'title': b.title, 'desc': b.desc, 'slug': b.slug, 'image': img_url, 'active': b.is_active})
+    return render_template('badges_admin.html', badges=badge_list)
 
 @app.route('/stats')
 def stats():
@@ -441,7 +656,18 @@ def checkin():
         # create post (mentions will be rendered into links when displaying)
             post = Post(user_id=current_user.id, sport=sport or None, minutes=minutes, message=message or None, image=image, visibility=visibility)
             db.session.add(post)
+            # update user's streak_days (simple logic: increment if checked-in today; external logic may vary)
+            try:
+                # simplistic: increment streak_days stored on user; caller may set correctly elsewhere
+                current_user.streak_days = (current_user.streak_days or 0) + 1
+            except Exception:
+                pass
             db.session.commit()
+            # run award checks for this user (streaks and cumulative minutes)
+            try:
+                run_award_checks_on_user(current_user.id)
+            except Exception:
+                pass
             # notify mentioned users in the post message
             try:
                 if message:
@@ -493,6 +719,11 @@ def share_post():
             create_notification(recipient_id=orig.user_id, actor_id=current_user.id, verb='share', post_id=orig.id, data=message)
     except Exception:
         pass
+    # Award share does not currently affect badges, but we can run a generic check
+    try:
+        run_award_checks_on_user(current_user.id)
+    except Exception:
+        pass
     return jsonify({'ok': True, 'post_id': newp.id})
 
 
@@ -530,6 +761,14 @@ def friends_accept():
             db.session.add(f1)
             db.session.delete(invite)
             db.session.commit()
+            # award friend-count-based badges for both users
+            try:
+                other_user = User.query.filter_by(username=invite.from_user).first()
+                if other_user:
+                    run_award_checks_on_user(other_user.id)
+                run_award_checks_on_user(current_user.id)
+            except Exception:
+                pass
             return jsonify({'ok': True, 'friend': invite.from_user})
         except Exception:
             db.session.rollback()
@@ -632,6 +871,16 @@ def index():
                     'message': orig.message,
                     'image': orig.image
                 }
+        # fetch the user's pinned badge (first pinned) if any
+        pinned_badge = None
+        try:
+            ubp = UserBadge.query.filter_by(user_id=p.user.id, pinned=True).order_by(UserBadge.earned_at.asc()).first()
+            if ubp:
+                bimg = ubp.badge.image_filename
+                if bimg:
+                    pinned_badge = url_for('static', filename=f'badges/{bimg}')
+        except Exception:
+            pinned_badge = None
 
         posts.append({
             'id': p.id,
@@ -693,7 +942,19 @@ def profile_page():
     p_list = []
     for p in user_posts:
         p_list.append({'id': p.id, 'sport': p.sport, 'minutes': p.minutes, 'message': p.message, 'image': p.image, 'created_at': p.created_at.strftime('%Y-%m-%d %H:%M')})
-    return render_template('profile.html', profile=current_user, posts=p_list)
+    # fetch user's earned badges
+    earned = []
+    try:
+        ubs = UserBadge.query.filter_by(user_id=current_user.id).all()
+        for ub in ubs:
+            b = Badge.query.get(ub.badge_id)
+            if b:
+                img = url_for('static', filename=f'badges/{b.image_filename}') if b.image_filename else None
+                earned.append({'title': b.title, 'desc': b.desc, 'image': img, 'earned_at': ub.earned_at})
+    except Exception:
+        earned = []
+
+    return render_template('profile.html', profile=current_user, posts=p_list, earned_badges=earned)
 
 
 @app.route('/post/<int:post_id>/edit', methods=['GET', 'POST'])
@@ -823,6 +1084,58 @@ def notifications_page():
         post = Post.query.get(n.post_id) if n.post_id else None
         out.append({'id': n.id, 'verb': n.verb, 'actor': (actor.display_name or actor.username) if actor else None, 'actor_avatar': actor.avatar if actor else None, 'post_id': n.post_id, 'comment_id': n.comment_id, 'data': n.data, 'created_at': n.created_at.strftime('%Y-%m-%d %H:%M'), 'read': n.read})
     return render_template('notifications.html', notifications=out)
+
+
+@app.route('/badge/pin', methods=['POST'])
+@login_required
+def badge_pin():
+    data = request.get_json() or {}
+    title = data.get('title') or request.form.get('title')
+    if not title:
+        return jsonify({'ok': False, 'error': 'no badge specified'}), 400
+    # find badge by title
+    b = Badge.query.filter_by(title=title).first()
+    if not b:
+        return jsonify({'ok': False, 'error': 'badge not found'}), 404
+    # check user earned it
+    ub = UserBadge.query.filter_by(user_id=current_user.id, badge_id=b.id).first()
+    if not ub:
+        return jsonify({'ok': False, 'error': 'not earned'}), 403
+    # check pinned count
+    pinned_count = UserBadge.query.filter_by(user_id=current_user.id, pinned=True).count()
+    if ub.pinned:
+        return jsonify({'ok': True})
+    if pinned_count >= 3:
+        return jsonify({'ok': False, 'error': 'max pinned (3) reached'}), 400
+    try:
+        ub.pinned = True
+        db.session.commit()
+        return jsonify({'ok': True})
+    except Exception:
+        db.session.rollback()
+        return jsonify({'ok': False}), 500
+
+
+@app.route('/badge/unpin', methods=['POST'])
+@login_required
+def badge_unpin():
+    data = request.get_json() or {}
+    title = data.get('title') or request.form.get('title')
+    if not title:
+        return jsonify({'ok': False, 'error': 'no badge specified'}), 400
+    b = Badge.query.filter_by(title=title).first()
+    if not b:
+        return jsonify({'ok': False, 'error': 'badge not found'}), 404
+    ub = UserBadge.query.filter_by(user_id=current_user.id, badge_id=b.id).first()
+    if not ub:
+        return jsonify({'ok': False, 'error': 'not earned'}), 403
+    try:
+        ub.pinned = False
+        db.session.commit()
+        return jsonify({'ok': True})
+    except Exception:
+        db.session.rollback()
+        return jsonify({'ok': False}), 500
 
 
 @app.route('/notifications/mark_read', methods=['POST'])

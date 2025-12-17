@@ -21,6 +21,9 @@
                     <div style="display:flex; align-items:center; gap:8px;">
                         {% if post.avatar %}
                             <img src="{{ post.avatar }}" class="avatar" alt="avatar">
+                                {% if post.pinned_badge %}
+                                <img src="{{ post.pinned_badge }}" alt="badge" class="avatar-badge">
+                                {% endif %}
                         {% else %}
                             <div class="avatar placeholder">{{ post.user[0]|upper }}</div>
                         {% endif %}

@@ -9,11 +9,25 @@
     <div class="container">
         <h2>徽章</h2>
         <div class="badge-section">
-            <ul>
+            <ul class="badges-grid">
                 {% for badge in badges %}
-                <li class="badge {% if badge.achieved %}achieved{% endif %}">
-                    <span>{{ badge.title }}</span> - <small>{{ badge.desc }}</small>
-                    {% if badge.achieved %}<span class="badge-icon">🏅</span>{% endif %}
+                <li class="badge-item {% if not badge.earned %}dim{% endif %}">
+                    <div class="badge-wrap" title="{{ badge.desc }}">
+                    {% if badge.image %}
+                    <img src="{{ badge.image }}" alt="{{ badge.title }}" class="badge-img">
+                    {% else %}
+                    <div class="badge-img placeholder">🏅</div>
+                    {% endif %}
+                    </div>
+                    <div class="badge-info">
+                        <strong>{{ badge.title }}</strong>
+                        <div class="small">{{ badge.desc }}</div>
+                    </div>
+                    {% if badge.earned %}
+                    <div class="badge-earned">已獲得</div>
+                    {% else %}
+                    <div class="badge-hint">滑鼠移到上方可查看如何獲得</div>
+                    {% endif %}
                 </li>
                 {% endfor %}
             </ul>

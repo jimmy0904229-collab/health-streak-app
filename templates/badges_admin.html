@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>管理徽章</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h2>徽章管理</h2>
+        <form method="post" enctype="multipart/form-data">
+            <div>
+                <label>標題</label>
+                <input type="text" name="title" required>
+            </div>
+            <div>
+                <label>描述</label>
+                <input type="text" name="desc">
+            </div>
+            <div>
+                <label>Slug（識別名稱，選填）</label>
+                <input type="text" name="slug">
+            </div>
+            <div>
+                <label>圖片（PNG/SVG）</label>
+                <input type="file" name="image" accept="image/*">
+            </div>
+            <div>
+                <button type="submit">上傳徽章</button>
+            </div>
+        </form>
+
+        <h3>現有徽章</h3>
+        <ul class="badges-admin-list">
+            {% for b in badges %}
+            <li>
+                {% if b.image %}<img src="{{ b.image }}" style="width:64px;height:64px;object-fit:contain">{% endif %}
+                <strong>{{ b.title }}</strong> - <small>{{ b.desc }}</small>
+                <span style="margin-left:10px">{{ '啟用' if b.active else '停用' }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+
+    </div>
+</body>
+</html>

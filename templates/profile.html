@@ -18,6 +18,34 @@
             <p><strong>連續運動天數：</strong> {{ profile.streak_days }} 天</p>
         </div>
 
+        <div class="profile-badges">
+            <h3>已獲徽章</h3>
+            {% if earned_badges and earned_badges|length > 0 %}
+            <ul class="badges-grid small">
+                {% for b in earned_badges %}
+                <li>
+                    {% if b.image %}
+                    <img src="{{ b.image }}" alt="{{ b.title }}" style="width:48px;height:48px;object-fit:contain">
+                    {% else %}
+                    <div class="badge-img placeholder">🏅</div>
+                    {% endif %}
+                    <div style="display:inline-block; vertical-align:top; margin-left:8px;">
+                        <div><strong>{{ b.title }}</strong></div>
+                        <div class="small">{{ b.earned_at.strftime('%Y-%m-%d') if b.earned_at else '' }}</div>
+                    </div>
+                    {% if profile.username == current_user.username %}
+                    <div style="margin-left:8px; display:inline-block;">
+                        <button class="btn small pin-btn" data-badge-title="{{ b.title }}">掛上</button>
+                    </div>
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p>尚未獲得徽章</p>
+            {% endif %}
+        </div>
+
         <div class="profile-settings">
             <h3>個人設定</h3>
                         <p style="text-align:center;"><a href="{{ url_for('logout') }}" class="btn">登出</a></p>
@@ -76,5 +104,24 @@
         <a href="{{ url_for('stats') }}" class="nav-item">分析</a>
         <a href="{{ url_for('badges_page') }}" class="nav-item">徽章</a>
     </div>
+    <script>
+    // simple client-side pin action: call pin endpoint
+    document.addEventListener('click', function(e){
+        if(e.target && e.target.classList.contains('pin-btn')){
+            const btn = e.target;
+            const title = btn.getAttribute('data-badge-title');
+            // find badge by title in DOM -- this is a simple approach; server side mapping is stable
+            fetch('/badge/pin', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({title:title})}).then(r=>r.json()).then(j=>{
+                if(j.ok){
+                    btn.textContent = '已掛上';
+                    btn.disabled = true;
+                    alert('徽章已掛上（最多 3 個）');
+                } else {
+                    alert('掛上失敗: ' + (j.error||''));
+                }
+            })
+        }
+    })
+    </script>
 </body>
 </html>
