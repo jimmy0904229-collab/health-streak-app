@@ -763,10 +763,17 @@ def delete_account():
         pass
 
     try:
-        # delete user's posts, comments, likes
-        Post.query.filter_by(user_id=uid).delete()
+        # First, delete comments and likes attached to the user's posts (other users' interactions)
+        user_posts = db.session.query(Post.id).filter_by(user_id=uid).all()
+        post_ids = [r[0] for r in user_posts]
+        if post_ids:
+            Comment.query.filter(Comment.post_id.in_(post_ids)).delete(synchronize_session=False)
+            Like.query.filter(Like.post_id.in_(post_ids)).delete(synchronize_session=False)
+        # Then delete the user's own comments and likes (authored by the user)
         Comment.query.filter_by(user_id=uid).delete()
         Like.query.filter_by(user_id=uid).delete()
+        # Now delete the user's posts
+        Post.query.filter_by(user_id=uid).delete()
         # delete friend relations owned by user and references to user's username
         Friend.query.filter_by(owner_id=uid).delete()
         Friend.query.filter(Friend.friend_name == uname).delete()
