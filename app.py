@@ -86,6 +86,43 @@ else:
     USER_TABLE = 'users'
 
 
+@app.before_first_request
+def _log_db_diagnostics():
+    """Run a small set of diagnostics once at app startup to help debug DB/SSL issues.
+    This logs: presence of DATABASE_URL, selected USER_TABLE, a simple SELECT 1, postgres ssl setting (if available),
+    and a short sample from pg_stat_ssl if the view exists. Errors are caught and logged.
+    """
+    try:
+        db_url = os.environ.get('DATABASE_URL') or os.environ.get('RENDER_DATABASE_URL') or ''
+        app.logger.info('DB diagnostics starting. DATABASE_URL present=%s; USER_TABLE=%s', bool(db_url), USER_TABLE)
+        app.logger.debug('DB env PGSSLMODE=%s; PGHOST=%s; PGPORT=%s', os.environ.get('PGSSLMODE'), os.environ.get('PGHOST') or os.environ.get('DB_HOST'), os.environ.get('PGPORT') or os.environ.get('DB_PORT'))
+        # quick connectivity check
+        try:
+            with db.engine.connect() as conn:
+                try:
+                    val = conn.execute(text('SELECT 1')).scalar()
+                    app.logger.info('DB simple query returned: %s', val)
+                except Exception as e:
+                    app.logger.warning('DB simple query failed: %s', str(e))
+                # server-side SSL setting (if Postgres supports SHOW ssl)
+                try:
+                    ssl_setting = conn.execute(text("SHOW ssl"))
+                    ssl_val = ssl_setting.scalar()
+                    app.logger.info('Postgres "ssl" setting: %s', ssl_val)
+                except Exception as e:
+                    app.logger.debug('Could not read Postgres ssl setting: %s', str(e))
+                # try pg_stat_ssl join for active sessions (may not exist on older versions or restricted roles)
+                try:
+                    rows = conn.execute(text('SELECT pid, ssl, client_addr FROM pg_stat_ssl JOIN pg_stat_activity USING (pid) LIMIT 5')).fetchall()
+                    app.logger.info('pg_stat_ssl sample rows: %s', rows)
+                except Exception as e:
+                    app.logger.debug('pg_stat_ssl not available or query failed: %s', str(e))
+        except Exception as e:
+            app.logger.exception('DB engine.connect() failed: %s', str(e))
+    except Exception:
+        app.logger.exception('Unexpected error during DB diagnostics')
+
+
 
 # --- Optional S3 upload support ---
 def s3_configured():
