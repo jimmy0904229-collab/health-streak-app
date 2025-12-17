@@ -736,8 +736,11 @@ def delete_post(post_id):
         return redirect(url_for('index'))
     try:
         # delete related comments and likes
+        # delete comments and likes associated with the post
         Comment.query.filter_by(post_id=p.id).delete()
         Like.query.filter_by(post_id=p.id).delete()
+        # delete notifications that reference this post to avoid FK constraint
+        Notification.query.filter_by(post_id=p.id).delete()
         db.session.delete(p)
         db.session.commit()
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.is_json:
@@ -772,6 +775,12 @@ def delete_account():
             try:
                 db.session.execute(text('DELETE FROM "comment" WHERE post_id = ANY(:ids)'), {'ids': post_ids})
                 db.session.execute(text('DELETE FROM "like" WHERE post_id = ANY(:ids)'), {'ids': post_ids})
+                # also delete notifications that reference these posts
+                try:
+                    db.session.execute(text('DELETE FROM "notification" WHERE post_id = ANY(:ids)'), {'ids': post_ids})
+                except Exception:
+                    # ignore and fallback to ORM below
+                    pass
                 db.session.commit()
             except Exception:
                 db.session.rollback()
