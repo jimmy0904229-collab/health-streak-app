@@ -741,10 +741,15 @@ def checkin():
         flash('已新增打卡貼文')
         return redirect(url_for('index'))
 
-    # prepare defaults for date/time inputs
-    now = datetime.utcnow()
-    default_date = now.strftime('%Y-%m-%d')
-    default_time = now.strftime('%H:%M')
+    # prepare defaults for date/time inputs (use Asia/Taipei local time)
+    try:
+        now_local = datetime.now(ZoneInfo('Asia/Taipei'))
+        default_date = now_local.strftime('%Y-%m-%d')
+        default_time = now_local.strftime('%H:%M')
+    except Exception:
+        now = datetime.utcnow()
+        default_date = now.strftime('%Y-%m-%d')
+        default_time = now.strftime('%H:%M')
     return render_template('checkin.html', default_date=default_date, default_time=default_time)
 
 
