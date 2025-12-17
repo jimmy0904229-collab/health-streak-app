@@ -91,3 +91,49 @@ document.addEventListener('submit', function(e){
 
 // Friend search/accept handled partially in friends.html; here we can add helper if needed later
 
+// Post menu toggle and delete handling (centralized)
+document.addEventListener('click', function(e){
+    // toggle three-dot menu
+    const menuBtn = e.target.closest('.post-menu-btn');
+    if(menuBtn){
+        e.stopPropagation();
+        const menu = menuBtn.parentElement && menuBtn.parentElement.querySelector('.post-menu-list');
+        if(!menu) return;
+        // hide other menus
+        document.querySelectorAll('.post-menu-list').forEach(m=>{ if(m !== menu) m.style.display='none'; });
+        menu.style.display = (menu.style.display === 'block') ? 'none' : 'block';
+        return;
+    }
+
+    // delete from menu
+    const delBtn = e.target.closest('.post-menu-delete-btn');
+    if(delBtn){
+        e.preventDefault();
+        e.stopPropagation();
+        if(!confirm('確定要刪除此貼文？')) return;
+        const menu = delBtn.closest('.post-menu');
+        const pid = menu && menu.getAttribute('data-post-id');
+        if(!pid) return alert('找不到貼文 id');
+        fetch(`/post/${pid}/delete`, {method:'POST', headers: {'X-Requested-With': 'XMLHttpRequest'} }).then(r=>{
+            if(r.status === 200) return r.json();
+            throw new Error('Network');
+        }).then(j=>{ if(j.ok) location.reload(); else alert('刪除失敗') }).catch(()=> alert('刪除失敗'));
+        return;
+    }
+
+    // legacy inline delete buttons
+    const legacyDel = e.target.closest('.delete-post-btn');
+    if(legacyDel){
+        e.preventDefault();
+        if(!confirm('確定要刪除此貼文？')) return;
+        const pid = legacyDel.getAttribute('data-post-id');
+        fetch(`/post/${pid}/delete`, {method:'POST', headers: {'X-Requested-With': 'XMLHttpRequest'} }).then(r=>r.json()).then(j=>{ if(j.ok) location.reload(); else alert('刪除失敗') }).catch(()=> alert('刪除失敗'));
+        return;
+    }
+
+    // close menus when clicking outside
+    if(!e.target.closest('.post-menu')){
+        document.querySelectorAll('.post-menu-list').forEach(m=> m.style.display='none');
+    }
+});
+

@@ -112,47 +112,5 @@
     </div>
 
     <script src="{{ url_for('static', filename='app.js') }}"></script>
-    <script>
-    // post menu toggle and delete handling
-    document.querySelectorAll('.post-menu-btn').forEach(btn=>{
-        btn.addEventListener('click', (e)=>{
-            e.stopPropagation();
-            const menu = btn.parentElement.querySelector('.post-menu-list');
-            if(!menu) return;
-            // toggle visibility
-            menu.style.display = (menu.style.display === 'none' || !menu.style.display) ? 'block' : 'none';
-        })
-    })
-
-    // close menus when clicking outside
-    document.addEventListener('click', ()=>{
-        document.querySelectorAll('.post-menu-list').forEach(m=> m.style.display='none');
-    })
-
-    // handle delete from menu buttons
-    document.querySelectorAll('.post-menu-delete-btn').forEach(b=>{
-        b.addEventListener('click', (e)=>{
-            e.preventDefault();
-            e.stopPropagation();
-            if(!confirm('確定要刪除此貼文？')) return;
-            const menu = b.closest('.post-menu');
-            const pid = menu && menu.getAttribute('data-post-id');
-            if(!pid) return alert('找不到貼文 id');
-            fetch(`/post/${pid}/delete`, {method:'POST'}).then(r=>{
-                if(r.status===200) return r.json();
-                throw new Error('Network');
-            }).then(j=>{ if(j.ok) location.reload(); else alert('刪除失敗') }).catch(()=>alert('刪除失敗'))
-        })
-    })
-
-    // keep support for legacy inline delete buttons if present
-    document.querySelectorAll('.delete-post-btn').forEach(b=>{
-        b.addEventListener('click', ()=>{
-            if(!confirm('確定要刪除此貼文？')) return;
-            const pid = b.getAttribute('data-post-id');
-            fetch(`/post/${pid}/delete`, {method:'POST'}).then(r=>r.json()).then(j=>{ if(j.ok) location.reload(); else alert('刪除失敗') })
-        })
-    })
-    </script>
 </body>
 </html>
