@@ -322,6 +322,7 @@ def comment_post():
 
 from sqlalchemy import case, and_
 from sqlalchemy import or_
+from sqlalchemy import text
 import re
 
 
@@ -767,8 +768,17 @@ def delete_account():
         user_posts = db.session.query(Post.id).filter_by(user_id=uid).all()
         post_ids = [r[0] for r in user_posts]
         if post_ids:
-            Comment.query.filter(Comment.post_id.in_(post_ids)).delete(synchronize_session=False)
-            Like.query.filter(Like.post_id.in_(post_ids)).delete(synchronize_session=False)
+            # Use raw SQL to ensure child rows are deleted before parent rows and avoid FK constraint errors
+            try:
+                db.session.execute(text('DELETE FROM "comment" WHERE post_id = ANY(:ids)'), {'ids': post_ids})
+                db.session.execute(text('DELETE FROM "like" WHERE post_id = ANY(:ids)'), {'ids': post_ids})
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                # fallback to ORM delete if raw SQL fails
+                Comment.query.filter(Comment.post_id.in_(post_ids)).delete(synchronize_session=False)
+                Like.query.filter(Like.post_id.in_(post_ids)).delete(synchronize_session=False)
+                db.session.commit()
         # Then delete the user's own comments and likes (authored by the user)
         Comment.query.filter_by(user_id=uid).delete()
         Like.query.filter_by(user_id=uid).delete()
