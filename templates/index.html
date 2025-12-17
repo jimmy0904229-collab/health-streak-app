@@ -17,7 +17,7 @@
             </div>
             {% for post in posts %}
             <article class="post" data-post-id="{{ post.id }}">
-                <div class="post-header">
+                <div class="post-header" style="position:relative;">
                     <div style="display:flex; align-items:center; gap:8px;">
                         {% if post.avatar %}
                             <img src="{{ post.avatar }}" class="avatar" alt="avatar">
