@@ -1102,8 +1102,9 @@ def index():
 
         posts.append({
             'id': p.id,
-            'user': p.user.display_name or p.user.username,
-            'username': p.user.username,
+            # 如果 p.user 存在就顯示 display_name 或 username，否則使用 "未知使用者"
+            'user': (p.user.display_name or p.user.username) if p.user else "未知使用者",
+            'username': p.user.username if p.user else "unknown",
             'avatar': avatar_url,
             'sport': p.sport,
             'minutes': p.minutes,
