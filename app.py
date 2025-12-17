@@ -49,7 +49,8 @@ if db_url:
     app.config['SQLALCHEMY_DATABASE_URI'] = db_url
     # 如果是 Postgres，建議開啟 sslmode=require（可由 PGSSLMODE 環境變數覆蓋）
     app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-        'connect_args': {'sslmode': os.environ.get('PGSSLMODE', 'require')}
+        'connect_args': {'sslmode': os.environ.get('PGSSLMODE', 'require')},
+        'pool_pre_ping': True,
     }
 else:
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
