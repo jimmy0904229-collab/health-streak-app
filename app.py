@@ -86,12 +86,18 @@ else:
     USER_TABLE = 'users'
 
 
-@app.before_first_request
+# 確保診斷程式僅執行一次
+_db_diagnostics_ran = False
+
+@app.before_request
+def _run_db_diagnostics_once():
+    global _db_diagnostics_ran
+    if not _db_diagnostics_ran:
+        _db_diagnostics_ran = True
+        _log_db_diagnostics()
+
+
 def _log_db_diagnostics():
-    """Run a small set of diagnostics once at app startup to help debug DB/SSL issues.
-    This logs: presence of DATABASE_URL, selected USER_TABLE, a simple SELECT 1, postgres ssl setting (if available),
-    and a short sample from pg_stat_ssl if the view exists. Errors are caught and logged.
-    """
     try:
         db_url = os.environ.get('DATABASE_URL') or os.environ.get('RENDER_DATABASE_URL') or ''
         app.logger.info('DB diagnostics starting. DATABASE_URL present=%s; USER_TABLE=%s', bool(db_url), USER_TABLE)
@@ -478,8 +484,6 @@ BADGE_DEFINITIONS = {
     'streak_7': {'title': '7 Day Streak', 'desc': 'Complete 7 consecutive check-ins', 'slug': 'streak_7', 'image_files': ['7 day.png']},
     'hours_50': {'title': '50 Hours', 'desc': 'Accumulate 50 hours of activity', 'slug': 'hours_50', 'image_files': ['50 hour.png']},
     'hours_100': {'title': '100 Hours', 'desc': 'Accumulate 100 hours of activity', 'slug': 'hours_100', 'image_files': ['100hour.png']},
-    'hours_500': {'title': '500 Hours', 'desc': 'Accumulate 500 hours of activity', 'slug': 'hours_500', 'image_files': ['500 hour.png']},
-    'comments_5': {'title': '5 Comments', 'desc': 'Receive 5 comments on your posts', 'slug': 'comments_5', 'image_files': ['5com.png']},
     'likes_10': {'title': '10 Likes', 'desc': 'Receive 10 likes on your posts', 'slug': 'likes_10', 'image_files': ['10good.png']},
     'friends_3': {'title': '3 Friends', 'desc': 'Have 3 friends', 'slug': 'friends_3', 'image_files': ['3friend.png']},
     'friends_10': {'title': '10 Friends', 'desc': 'Have 10 friends', 'slug': 'friends_10', 'image_files': ['10friend.png']},
@@ -1492,8 +1496,6 @@ def login():
             return redirect(url_for('index'))
         flash('登入失敗，請檢查帳號或密碼')
     return render_template('login.html')
-
-
 
 
 @app.route('/logout')
