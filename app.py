@@ -58,6 +58,32 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 # Initialize Flask-Migrate
 migrate = Migrate(app, db)
+# --- Runtime DB inspection to be resilient to schema differences ---
+from sqlalchemy import inspect as sa_inspect
+
+def _get_existing_tables_and_columns():
+    try:
+        insp = sa_inspect(db.engine)
+        tables = set(insp.get_table_names())
+        cols = {}
+        for t in tables:
+            try:
+                cols[t] = {c['name'] for c in insp.get_columns(t)}
+            except Exception:
+                cols[t] = set()
+        return tables, cols
+    except Exception:
+        return set(), {}
+
+EXISTING_TABLES, EXISTING_COLUMNS = _get_existing_tables_and_columns()
+# choose which user table exists (prefer 'users' then 'user')
+if 'users' in EXISTING_TABLES:
+    USER_TABLE = 'users'
+elif 'user' in EXISTING_TABLES:
+    USER_TABLE = 'user'
+else:
+    # fallback to 'users' as our code default; migrations can create it later
+    USER_TABLE = 'users'
 
 
 
@@ -178,29 +204,34 @@ login_manager.login_message_category = 'info'
 
 # 定義資料模型
 class User(UserMixin, db.Model):
-    __tablename__ = 'users'
+    # tablename chosen at runtime to match existing DB ('users' or 'user')
+    __tablename__ = USER_TABLE
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
     display_name = db.Column(db.String(120), nullable=True)
     avatar = db.Column(db.String(300), nullable=True)
-    # optional avatar binary stored in DB when STORE_UPLOADS_IN_DB=1
-    avatar_blob = db.Column(db.LargeBinary, nullable=True)
-    avatar_mime = db.Column(db.String(100), nullable=True)
+    # optionally map avatar_blob/avatar_mime only if DB has those columns
+    if USER_TABLE in EXISTING_COLUMNS and 'avatar_blob' in EXISTING_COLUMNS.get(USER_TABLE, set()):
+        avatar_blob = db.Column(db.LargeBinary, nullable=True)
+    if USER_TABLE in EXISTING_COLUMNS and 'avatar_mime' in EXISTING_COLUMNS.get(USER_TABLE, set()):
+        avatar_mime = db.Column(db.String(100), nullable=True)
     notify = db.Column(db.Boolean, default=True)
     streak_days = db.Column(db.Integer, default=0)
 
 class Post(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey(f"{USER_TABLE}.id"), nullable=False)
     sport = db.Column(db.String(80), nullable=True)
     minutes = db.Column(db.Integer, default=0)
     message = db.Column(db.Text, nullable=True)
     visibility = db.Column(db.String(20), default='public')
     image = db.Column(db.String(300), nullable=True)
-    # optional image binary stored in DB when STORE_UPLOADS_IN_DB=1
-    image_blob = db.Column(db.LargeBinary, nullable=True)
-    image_mime = db.Column(db.String(100), nullable=True)
+    # optionally map image_blob/image_mime only if DB has those columns
+    if 'post' in EXISTING_COLUMNS and 'image_blob' in EXISTING_COLUMNS.get('post', set()):
+        image_blob = db.Column(db.LargeBinary, nullable=True)
+    if 'post' in EXISTING_COLUMNS and 'image_mime' in EXISTING_COLUMNS.get('post', set()):
+        image_mime = db.Column(db.String(100), nullable=True)
     shared_from_id = db.Column(db.Integer, db.ForeignKey('post.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     likes = db.Column(db.Integer, default=0)
@@ -210,7 +241,7 @@ class Comment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     post_id = db.Column(db.Integer, db.ForeignKey('post.id'), nullable=False)
     user = db.Column(db.String(120), nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey(f"{USER_TABLE}.id"), nullable=True)
     avatar = db.Column(db.String(300), nullable=True)
     text = db.Column(db.Text, nullable=False)
     time = db.Column(db.DateTime, default=datetime.utcnow)
@@ -246,7 +277,7 @@ class RecentActivity(db.Model):
 # 定義 Friend 和 PendingInvite 資料模型
 class Friend(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    owner_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    owner_id = db.Column(db.Integer, db.ForeignKey(f"{USER_TABLE}.id"), nullable=False)
     friend_name = db.Column(db.String(80), nullable=False)
     owner = db.relationship('User', backref=db.backref('friends', lazy=True))
 
@@ -260,15 +291,15 @@ class PendingInvite(db.Model):
 # Likes: one per (user, post)
 class Like(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey(f"{USER_TABLE}.id"), nullable=False)
     post_id = db.Column(db.Integer, db.ForeignKey('post.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     __table_args__ = (db.UniqueConstraint('user_id', 'post_id', name='uix_user_post_like'),)
 
 class Notification(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)  # recipient
-    actor_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # who triggered
+    user_id = db.Column(db.Integer, db.ForeignKey(f"{USER_TABLE}.id"), nullable=False)  # recipient
+    actor_id = db.Column(db.Integer, db.ForeignKey(f"{USER_TABLE}.id"), nullable=True)  # who triggered
     verb = db.Column(db.String(50), nullable=False)  # like, comment, share, mention
     post_id = db.Column(db.Integer, db.ForeignKey('post.id'), nullable=True)
     comment_id = db.Column(db.Integer, db.ForeignKey('comment.id'), nullable=True)
