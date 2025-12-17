@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 import base64
 import io
 from werkzeug.utils import secure_filename
@@ -135,6 +136,24 @@ def save_uploaded_file(file):
     file.stream.seek(0)
     file.save(filepath)
     return url_for('static', filename=f'uploads/{unique_name}')
+
+
+def to_local_str(dt):
+    """Convert a stored UTC datetime (naive or tz-aware) to Asia/Taipei formatted string."""
+    if not dt:
+        return ''
+    try:
+        tz = ZoneInfo('Asia/Taipei')
+        if dt.tzinfo is None:
+            # treat naive as UTC
+            dt = dt.replace(tzinfo=timezone.utc)
+        local = dt.astimezone(tz)
+        return local.strftime('%Y-%m-%d %H:%M')
+    except Exception:
+        try:
+            return dt.strftime('%Y-%m-%d %H:%M')
+        except Exception:
+            return ''
 
 
 # 登入管理
@@ -356,7 +375,7 @@ def comment_post():
                     create_notification(recipient_id=u.id, actor_id=commenter_id, verb='mention', post_id=p.id, comment_id=comment.id, data=text)
         except Exception:
             pass
-        return jsonify({'ok': True, 'comment': {'user': comment.user, 'avatar': comment.avatar, 'text': comment.text, 'time': comment.time.strftime('%Y-%m-%d %H:%M')}})
+        return jsonify({'ok': True, 'comment': {'user': comment.user, 'avatar': comment.avatar, 'text': comment.text, 'time': to_local_str(comment.time)}})
     return jsonify({'ok': False}), 404
 
 from sqlalchemy import case, and_
@@ -653,23 +672,54 @@ def checkin():
         if file and file.filename and allowed_file(file.filename):
             image = save_uploaded_file(file)
 
-        # create post (mentions will be rendered into links when displaying)
-        post = Post(user_id=current_user.id, sport=sport or None, minutes=minutes, message=message or None, image=image, visibility=visibility)
-        # optional: accept date/time fields from form to override created_at
+        # determine post created_at in UTC (store UTC in DB)
         date_str = request.form.get('date')
         time_str = request.form.get('time')
-        if date_str and time_str:
-            try:
-                # expected formats: YYYY-MM-DD and HH:MM
-                dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
-                post.created_at = dt
-            except Exception:
-                # ignore parse errors and use default created_at
-                pass
-        db.session.add(post)
-        # update user's streak_days (simple logic: increment if checked-in today; external logic may vary)
+        post_created_utc = None
         try:
-            current_user.streak_days = (current_user.streak_days or 0) + 1
+            if date_str and time_str:
+                # parse user-provided local datetime (assume Asia/Taipei)
+                dt_local = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
+                dt_local = dt_local.replace(tzinfo=ZoneInfo('Asia/Taipei'))
+                dt_utc = dt_local.astimezone(timezone.utc)
+                # store naive UTC
+                post_created_utc = dt_utc.replace(tzinfo=None)
+            else:
+                post_created_utc = datetime.utcnow()
+        except Exception:
+            post_created_utc = datetime.utcnow()
+
+        # compute streak based on dates in Asia/Taipei (consecutive days)
+        try:
+            local_tz = ZoneInfo('Asia/Taipei')
+            this_local_date = post_created_utc.replace(tzinfo=timezone.utc).astimezone(local_tz).date()
+
+            # fetch last previous post (before this one) - do this before adding the new post
+            last_post = Post.query.filter(Post.user_id == current_user.id).order_by(Post.created_at.desc()).first()
+            last_date = None
+            if last_post:
+                try:
+                    last_date = (last_post.created_at.replace(tzinfo=timezone.utc).astimezone(local_tz)).date()
+                except Exception:
+                    last_date = None
+
+            if last_post is None:
+                new_streak = 1
+            else:
+                if last_date == this_local_date:
+                    new_streak = current_user.streak_days or 1
+                elif last_date == (this_local_date - timedelta(days=1)):
+                    new_streak = (current_user.streak_days or 0) + 1
+                else:
+                    new_streak = 1
+        except Exception:
+            new_streak = (current_user.streak_days or 0) + 1
+
+        # create post with created_at set (UTC naive)
+        post = Post(user_id=current_user.id, sport=sport or None, minutes=minutes, message=message or None, image=image, visibility=visibility, created_at=post_created_utc)
+        db.session.add(post)
+        try:
+            current_user.streak_days = new_streak
         except Exception:
             pass
         db.session.commit()
@@ -751,7 +801,7 @@ def user_page(username):
     posts_q = Post.query.filter_by(user_id=u.id).order_by(Post.created_at.desc()).all()
     posts = []
     for p in posts_q:
-        posts.append({'id': p.id, 'sport': p.sport, 'minutes': p.minutes, 'message': p.message, 'image': p.image, 'created_at': p.created_at.strftime('%Y-%m-%d %H:%M')})
+        posts.append({'id': p.id, 'sport': p.sport, 'minutes': p.minutes, 'message': p.message, 'image': p.image, 'created_at': to_local_str(p.created_at)})
     return render_template('user.html', user=u, posts=posts)
 
 
@@ -812,7 +862,8 @@ def friends_invite():
     already = Friend.query.filter_by(owner_id=current_user.id, friend_name=username).first()
     if already:
         return jsonify({'ok': False, 'error': '已是好友'}), 400
-    inv = PendingInvite(from_user=current_user.username, to_user=username, time=datetime.utcnow().strftime('%Y-%m-%d %H:%M'))
+    inv_time = datetime.now(ZoneInfo('Asia/Taipei')).strftime('%Y-%m-%d %H:%M')
+    inv = PendingInvite(from_user=current_user.username, to_user=username, time=inv_time)
     db.session.add(inv)
     db.session.commit()
     return jsonify({'ok': True})
@@ -861,7 +912,7 @@ def index():
                 u_c = User.query.filter_by(username=c.user).first()
                 if u_c:
                     c_avatar = u_c.avatar
-            comments_list.append({'user': c.user, 'avatar': c_avatar, 'text': c.text, 'time': c.time.strftime('%Y-%m-%d %H:%M')})
+                comments_list.append({'user': c.user, 'avatar': c_avatar, 'text': c.text, 'time': to_local_str(c.time)})
 
         # convert mentions (@username) in message to links
         msg_html = None
@@ -910,7 +961,7 @@ def index():
             'message_html': msg_html,
             'image': p.image,
             'pinned_badges': pinned_badges,
-            'created_at': p.created_at.strftime('%Y-%m-%d %H:%M'),
+            'created_at': to_local_str(p.created_at),
             'likes': p.likes,
             'liked': liked_flag,
             'comments': comments_list,
@@ -935,7 +986,7 @@ def profile_page():
     user_posts = Post.query.filter_by(user_id=current_user.id).order_by(Post.created_at.desc()).all()
     p_list = []
     for p in user_posts:
-        p_list.append({'id': p.id, 'sport': p.sport, 'minutes': p.minutes, 'message': p.message, 'image': p.image, 'created_at': p.created_at.strftime('%Y-%m-%d %H:%M')})
+        p_list.append({'id': p.id, 'sport': p.sport, 'minutes': p.minutes, 'message': p.message, 'image': p.image, 'created_at': to_local_str(p.created_at)})
     # fetch user's earned badges
     earned = []
     try:
@@ -1076,7 +1127,7 @@ def notifications_page():
     for n in notes:
         actor = User.query.get(n.actor_id) if n.actor_id else None
         post = Post.query.get(n.post_id) if n.post_id else None
-        out.append({'id': n.id, 'verb': n.verb, 'actor': (actor.display_name or actor.username) if actor else None, 'actor_avatar': actor.avatar if actor else None, 'post_id': n.post_id, 'comment_id': n.comment_id, 'data': n.data, 'created_at': n.created_at.strftime('%Y-%m-%d %H:%M'), 'read': n.read})
+        out.append({'id': n.id, 'verb': n.verb, 'actor': (actor.display_name or actor.username) if actor else None, 'actor_avatar': actor.avatar if actor else None, 'post_id': n.post_id, 'comment_id': n.comment_id, 'data': n.data, 'created_at': to_local_str(n.created_at), 'read': n.read})
     return render_template('notifications.html', notifications=out)
 
 
