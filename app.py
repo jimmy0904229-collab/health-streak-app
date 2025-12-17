@@ -825,7 +825,22 @@ def checkin():
             new_streak = (current_user.streak_days or 0) + 1
 
         # create post with created_at set (UTC naive)
-        post = Post(user_id=current_user.id, sport=sport or None, minutes=minutes, message=message or None, image=image, image_blob=image_blob, image_mime=image_mime, visibility=visibility, created_at=post_created_utc)
+        # Only include image_blob/image_mime if the Post model actually defines those attributes
+        post_kwargs = {
+            'user_id': current_user.id,
+            'sport': sport or None,
+            'minutes': minutes,
+            'message': message or None,
+            'image': image,
+            'visibility': visibility,
+            'created_at': post_created_utc,
+        }
+        if hasattr(Post, 'image_blob') and image_blob is not None:
+            post_kwargs['image_blob'] = image_blob
+        if hasattr(Post, 'image_mime') and image_mime is not None:
+            post_kwargs['image_mime'] = image_mime
+
+        post = Post(**post_kwargs)
         db.session.add(post)
         try:
             current_user.streak_days = new_streak
