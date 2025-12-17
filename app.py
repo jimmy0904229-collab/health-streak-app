@@ -178,6 +178,7 @@ login_manager.login_message_category = 'info'
 
 # 定義資料模型
 class User(UserMixin, db.Model):
+    __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
@@ -191,7 +192,7 @@ class User(UserMixin, db.Model):
 
 class Post(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     sport = db.Column(db.String(80), nullable=True)
     minutes = db.Column(db.Integer, default=0)
     message = db.Column(db.Text, nullable=True)
@@ -209,7 +210,7 @@ class Comment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     post_id = db.Column(db.Integer, db.ForeignKey('post.id'), nullable=False)
     user = db.Column(db.String(120), nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     avatar = db.Column(db.String(300), nullable=True)
     text = db.Column(db.Text, nullable=False)
     time = db.Column(db.DateTime, default=datetime.utcnow)
@@ -245,7 +246,7 @@ class RecentActivity(db.Model):
 # 定義 Friend 和 PendingInvite 資料模型
 class Friend(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    owner_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    owner_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     friend_name = db.Column(db.String(80), nullable=False)
     owner = db.relationship('User', backref=db.backref('friends', lazy=True))
 
@@ -259,15 +260,15 @@ class PendingInvite(db.Model):
 # Likes: one per (user, post)
 class Like(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     post_id = db.Column(db.Integer, db.ForeignKey('post.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     __table_args__ = (db.UniqueConstraint('user_id', 'post_id', name='uix_user_post_like'),)
 
 class Notification(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)  # recipient
-    actor_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)  # who triggered
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)  # recipient
+    actor_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # who triggered
     verb = db.Column(db.String(50), nullable=False)  # like, comment, share, mention
     post_id = db.Column(db.Integer, db.ForeignKey('post.id'), nullable=True)
     comment_id = db.Column(db.Integer, db.ForeignKey('comment.id'), nullable=True)
@@ -279,7 +280,7 @@ class Notification(db.Model):
 # association: which user earned which badge
 class UserBadge(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     badge_id = db.Column(db.Integer, db.ForeignKey('badge.id'), nullable=False)
     earned_at = db.Column(db.DateTime, default=datetime.utcnow)
     pinned = db.Column(db.Boolean, default=False)
