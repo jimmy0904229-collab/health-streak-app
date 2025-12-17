@@ -95,47 +95,60 @@ def save_uploaded_file(file):
     """Save uploaded file either to S3 (if configured) or local static/uploads.
     Returns the public URL path to store in DB/template.
     """
-    filename = secure_filename(file.filename)
+    filename = secure_filename(file.filename or '')
+    if not filename:
+        return None
     # generate unique name to avoid collisions
     unique_name = f"{uuid.uuid4().hex}_{filename}"
-    # Try S3
     s3 = get_s3_client()
+    # Try S3 first (if configured)
     if s3:
         bucket = os.environ.get('AWS_S3_BUCKET')
         key = f'uploads/{unique_name}'
         content_type = getattr(file, 'content_type', None) or 'application/octet-stream'
-        # read file content
-        file.stream.seek(0)
-        data = file.read()
         try:
+            # ensure stream at start
+            try:
+                file.stream.seek(0)
+            except Exception:
+                pass
+            data = file.read()
             s3.put_object(Bucket=bucket, Key=key, Body=data, ACL='public-read', ContentType=content_type)
-        except Exception:
-            # fallback to local if upload fails
-            pass
-        else:
             base = get_s3_base_url()
             if base:
-                # if base explicitly provided, it may already include bucket
-                if base.startswith('http') and ('{bucket}' not in base):
-                    # For DO Spaces, base should be like https://{bucket}.{endpoint}
-                    if '{bucket}' in base:
-                        url = base.format(bucket=bucket) + f'/{key}'
-                    else:
-                        # if base contains the bucket already, just append key
-                        url = base + f'/{key}'
+                # if base includes formatting token for bucket
+                if '{bucket}' in base:
+                    url = base.format(bucket=bucket).rstrip('/') + f'/{key}'
+                else:
+                    url = base.rstrip('/') + f'/{key}'
+            else:
+                # default AWS URL
+                region = os.environ.get('AWS_REGION')
+                if region:
+                    url = f'https://{bucket}.s3.{region}.amazonaws.com/{key}'
                 else:
                     url = f'https://{bucket}.s3.amazonaws.com/{key}'
-            else:
-                url = f'https://{bucket}.s3.amazonaws.com/{key}'
+            app.logger.info('Uploaded file to S3: %s', url)
             return url
+        except Exception as e:
+            app.logger.warning('S3 upload failed (%s), falling back to local: %s', getattr(e, 'message', str(e)), filename)
 
-    # Local fallback
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_name)
-    # ensure folder exists
-    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-    file.stream.seek(0)
-    file.save(filepath)
-    return url_for('static', filename=f'uploads/{unique_name}')
+    # Local fallback storage
+    try:
+        dest_folder = app.config.get('UPLOAD_FOLDER', 'static/uploads')
+        os.makedirs(dest_folder, exist_ok=True)
+        filepath = os.path.join(dest_folder, unique_name)
+        try:
+            file.stream.seek(0)
+        except Exception:
+            pass
+        file.save(filepath)
+        url = url_for('static', filename=f'uploads/{unique_name}')
+        app.logger.info('Saved uploaded file locally: %s', url)
+        return url
+    except Exception as e:
+        app.logger.error('Failed to save uploaded file: %s', str(e))
+        return None
 
 
 def to_local_str(dt):
