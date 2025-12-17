@@ -8,7 +8,9 @@
 <body>
     <div class="container">
         <h2>{{ user.display_name or user.username }}</h2>
-        {% if user.avatar %}
+        {% if user.avatar_blob %}
+            <img src="{{ url_for('user_avatar', user_id=user.id) }}" class="profile-avatar" alt="avatar">
+        {% elif user.avatar %}
             <img src="{{ user.avatar }}" class="profile-avatar" alt="avatar">
         {% endif %}
         <h3>貼文</h3>

@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, Response
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 import base64
@@ -183,6 +183,9 @@ class User(UserMixin, db.Model):
     password = db.Column(db.String(200), nullable=False)
     display_name = db.Column(db.String(120), nullable=True)
     avatar = db.Column(db.String(300), nullable=True)
+    # optional avatar binary stored in DB when STORE_UPLOADS_IN_DB=1
+    avatar_blob = db.Column(db.LargeBinary, nullable=True)
+    avatar_mime = db.Column(db.String(100), nullable=True)
     notify = db.Column(db.Boolean, default=True)
     streak_days = db.Column(db.Integer, default=0)
 
@@ -194,6 +197,9 @@ class Post(db.Model):
     message = db.Column(db.Text, nullable=True)
     visibility = db.Column(db.String(20), default='public')
     image = db.Column(db.String(300), nullable=True)
+    # optional image binary stored in DB when STORE_UPLOADS_IN_DB=1
+    image_blob = db.Column(db.LargeBinary, nullable=True)
+    image_mime = db.Column(db.String(100), nullable=True)
     shared_from_id = db.Column(db.Integer, db.ForeignKey('post.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     likes = db.Column(db.Integer, default=0)
@@ -681,9 +687,26 @@ def checkin():
         message = request.form.get('message', '').strip()
         visibility = request.form.get('visibility', 'public')
         image = None
+        image_blob = None
+        image_mime = None
         file = request.files.get('image')
         if file and file.filename and allowed_file(file.filename):
-            image = save_uploaded_file(file)
+            # If configured to store uploads in DB, save bytes to Post.image_blob
+            if os.environ.get('STORE_UPLOADS_IN_DB') == '1':
+                try:
+                    try:
+                        file.stream.seek(0)
+                    except Exception:
+                        pass
+                    data = file.read()
+                    if data:
+                        image_blob = data
+                        image_mime = getattr(file, 'content_type', None) or 'application/octet-stream'
+                except Exception:
+                    image_blob = None
+                    image_mime = None
+            else:
+                image = save_uploaded_file(file)
 
         # determine post created_at in UTC (store UTC in DB)
         date_str = request.form.get('date')
@@ -729,7 +752,7 @@ def checkin():
             new_streak = (current_user.streak_days or 0) + 1
 
         # create post with created_at set (UTC naive)
-        post = Post(user_id=current_user.id, sport=sport or None, minutes=minutes, message=message or None, image=image, visibility=visibility, created_at=post_created_utc)
+        post = Post(user_id=current_user.id, sport=sport or None, minutes=minutes, message=message or None, image=image, image_blob=image_blob, image_mime=image_mime, visibility=visibility, created_at=post_created_utc)
         db.session.add(post)
         try:
             current_user.streak_days = new_streak
@@ -819,7 +842,14 @@ def user_page(username):
     posts_q = Post.query.filter_by(user_id=u.id).order_by(Post.created_at.desc()).all()
     posts = []
     for p in posts_q:
-        posts.append({'id': p.id, 'sport': p.sport, 'minutes': p.minutes, 'message': p.message, 'image': p.image, 'created_at': to_local_str(p.created_at)})
+        try:
+            if getattr(p, 'image_blob', None):
+                image_url = url_for('post_image', post_id=p.id)
+            else:
+                image_url = p.image
+        except Exception:
+            image_url = p.image
+        posts.append({'id': p.id, 'sport': p.sport, 'minutes': p.minutes, 'message': p.message, 'image': image_url, 'created_at': to_local_str(p.created_at)})
     return render_template('user.html', user=u, posts=posts)
 
 
@@ -929,8 +959,14 @@ def index():
                 # try to resolve by username
                 u_c = User.query.filter_by(username=c.user).first()
                 if u_c:
-                    c_avatar = u_c.avatar
-                comments_list.append({'user': c.user, 'avatar': c_avatar, 'text': c.text, 'time': to_local_str(c.time)})
+                    if getattr(u_c, 'avatar_blob', None):
+                        try:
+                            c_avatar = url_for('user_avatar', user_id=u_c.id)
+                        except Exception:
+                            c_avatar = u_c.avatar
+                    else:
+                        c_avatar = u_c.avatar
+            comments_list.append({'user': c.user, 'avatar': c_avatar, 'text': c.text, 'time': to_local_str(c.time)})
 
         # convert mentions (@username) in message to links
         msg_html = None
@@ -948,7 +984,7 @@ def index():
                 original = {
                     'id': orig.id,
                     'user': orig.user.display_name or orig.user.username,
-                    'avatar': orig.user.avatar,
+                    'avatar': (url_for('user_avatar', user_id=orig.user.id) if getattr(orig.user, 'avatar_blob', None) else orig.user.avatar),
                     'sport': orig.sport,
                     'minutes': orig.minutes,
                     'message': orig.message,
@@ -968,16 +1004,33 @@ def index():
         except Exception:
             pinned_badges = []
 
+        # compute avatar and image urls (prefer DB blobs when present)
+        try:
+            if getattr(p.user, 'avatar_blob', None):
+                avatar_url = url_for('user_avatar', user_id=p.user.id)
+            else:
+                avatar_url = p.user.avatar
+        except Exception:
+            avatar_url = p.user.avatar
+
+        try:
+            if getattr(p, 'image_blob', None):
+                image_url = url_for('post_image', post_id=p.id)
+            else:
+                image_url = p.image
+        except Exception:
+            image_url = p.image
+
         posts.append({
             'id': p.id,
             'user': p.user.display_name or p.user.username,
             'username': p.user.username,
-            'avatar': p.user.avatar,
+            'avatar': avatar_url,
             'sport': p.sport,
             'minutes': p.minutes,
             'message': p.message,
             'message_html': msg_html,
-            'image': p.image,
+            'image': image_url,
             'pinned_badges': pinned_badges,
             'created_at': to_local_str(p.created_at),
             'likes': p.likes,
@@ -1004,7 +1057,14 @@ def profile_page():
     user_posts = Post.query.filter_by(user_id=current_user.id).order_by(Post.created_at.desc()).all()
     p_list = []
     for p in user_posts:
-        p_list.append({'id': p.id, 'sport': p.sport, 'minutes': p.minutes, 'message': p.message, 'image': p.image, 'created_at': to_local_str(p.created_at)})
+        try:
+            if getattr(p, 'image_blob', None):
+                image_url = url_for('post_image', post_id=p.id)
+            else:
+                image_url = p.image
+        except Exception:
+            image_url = p.image
+        p_list.append({'id': p.id, 'sport': p.sport, 'minutes': p.minutes, 'message': p.message, 'image': image_url, 'created_at': to_local_str(p.created_at)})
     # fetch user's earned badges
     earned = []
     try:
@@ -1042,7 +1102,21 @@ def edit_post(post_id):
         # handle optional image replacement
         file = request.files.get('image')
         if file and file.filename and allowed_file(file.filename):
-            p.image = save_uploaded_file(file)
+            if os.environ.get('STORE_UPLOADS_IN_DB') == '1':
+                try:
+                    try:
+                        file.stream.seek(0)
+                    except Exception:
+                        pass
+                    data = file.read()
+                    if data:
+                        p.image_blob = data
+                        p.image_mime = getattr(file, 'content_type', None) or 'application/octet-stream'
+                        p.image = None
+                except Exception:
+                    pass
+            else:
+                p.image = save_uploaded_file(file)
 
         # parse date/time fields (assume Asia/Taipei local)
         date_str = request.form.get('date')
@@ -1178,7 +1252,14 @@ def notifications_page():
     for n in notes:
         actor = User.query.get(n.actor_id) if n.actor_id else None
         post = Post.query.get(n.post_id) if n.post_id else None
-        out.append({'id': n.id, 'verb': n.verb, 'actor': (actor.display_name or actor.username) if actor else None, 'actor_avatar': actor.avatar if actor else None, 'post_id': n.post_id, 'comment_id': n.comment_id, 'data': n.data, 'created_at': to_local_str(n.created_at), 'read': n.read})
+        try:
+            if actor and getattr(actor, 'avatar_blob', None):
+                actor_avatar = url_for('user_avatar', user_id=actor.id)
+            else:
+                actor_avatar = actor.avatar if actor else None
+        except Exception:
+            actor_avatar = actor.avatar if actor else None
+        out.append({'id': n.id, 'verb': n.verb, 'actor': (actor.display_name or actor.username) if actor else None, 'actor_avatar': actor_avatar, 'post_id': n.post_id, 'comment_id': n.comment_id, 'data': n.data, 'created_at': to_local_str(n.created_at), 'read': n.read})
     return render_template('notifications.html', notifications=out)
 
 
@@ -1202,7 +1283,21 @@ def settings_page():
         # handle avatar upload
         file = request.files.get('avatar')
         if file and file.filename and allowed_file(file.filename):
-            current_user.avatar = save_uploaded_file(file)
+            if os.environ.get('STORE_UPLOADS_IN_DB') == '1':
+                try:
+                    try:
+                        file.stream.seek(0)
+                    except Exception:
+                        pass
+                    data = file.read()
+                    if data:
+                        current_user.avatar_blob = data
+                        current_user.avatar_mime = getattr(file, 'content_type', None) or 'application/octet-stream'
+                        current_user.avatar = None
+                except Exception:
+                    pass
+            else:
+                current_user.avatar = save_uploaded_file(file)
 
         db.session.commit()
         flash('個人設定已更新')
@@ -1261,6 +1356,26 @@ def badge_unpin():
     except Exception:
         db.session.rollback()
         return jsonify({'ok': False}), 500
+
+
+@app.route('/uploads/post/<int:post_id>/image')
+def post_image(post_id):
+    """Serve image bytes stored in DB for a post."""
+    p = Post.query.get(post_id)
+    if not p or not p.image_blob:
+        return ('', 404)
+    mime = p.image_mime or 'application/octet-stream'
+    return Response(p.image_blob, mimetype=mime)
+
+
+@app.route('/uploads/user/<int:user_id>/avatar')
+def user_avatar(user_id):
+    """Serve avatar bytes stored in DB for a user."""
+    u = User.query.get(user_id)
+    if not u or not u.avatar_blob:
+        return ('', 404)
+    mime = u.avatar_mime or 'application/octet-stream'
+    return Response(u.avatar_blob, mimetype=mime)
 
 
 @app.route('/notifications/mark_read', methods=['POST'])

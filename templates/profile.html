@@ -9,7 +9,9 @@
     <div class="container">
         <h2>個人主頁</h2>
         <div class="profile-card">
-            {% if profile.avatar %}
+            {% if profile.avatar_blob %}
+                <img src="{{ url_for('user_avatar', user_id=profile.id) }}" alt="大頭貼" class="avatar profile-avatar">
+            {% elif profile.avatar %}
                 <img src="{{ profile.avatar }}" alt="大頭貼" class="avatar profile-avatar">
             {% else %}
                 <p>尚未上傳大頭貼</p>
