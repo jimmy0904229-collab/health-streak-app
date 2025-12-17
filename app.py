@@ -1079,12 +1079,18 @@ def index():
 
         # compute avatar and image urls (prefer DB blobs when present)
         try:
-            if getattr(p.user, 'avatar_blob', None):
+            # 如果 p.user 存在且有 avatar_blob，從 DB blob 產生 URL
+            if p.user and getattr(p.user, 'avatar_blob', None):
                 avatar_url = url_for('user_avatar', user_id=p.user.id)
             else:
-                avatar_url = p.user.avatar
+                # 如果 p.user 存在就取他的 avatar 屬性，否則使用預設頭像
+                if p.user:
+                    avatar_url = p.user.avatar
+                else:
+                    avatar_url = "https://ui-avatars.com/api/?name=Unknown"
         except Exception:
-            avatar_url = p.user.avatar
+            # 發生任何例外時也不要崩潰，改用預設頭像
+            avatar_url = "https://ui-avatars.com/api/?name=Unknown"
 
         try:
             if getattr(p, 'image_blob', None):
