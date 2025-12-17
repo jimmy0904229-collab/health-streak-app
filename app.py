@@ -870,16 +870,19 @@ def index():
                     'message': orig.message,
                     'image': orig.image
                 }
-        # fetch the user's pinned badge (first pinned) if any
-        pinned_badge = None
+        # fetch the user's pinned badges (up to 3) if any
+        pinned_badges = []
         try:
-            ubp = UserBadge.query.filter_by(user_id=p.user.id, pinned=True).order_by(UserBadge.earned_at.asc()).first()
-            if ubp:
-                bimg = ubp.badge.image_filename
-                if bimg:
-                    pinned_badge = url_for('static', filename=f'badges/{bimg}')
+            ubps = UserBadge.query.filter_by(user_id=p.user.id, pinned=True).order_by(UserBadge.earned_at.asc()).limit(3).all()
+            for ubp in ubps:
+                try:
+                    bimg = ubp.badge.image_filename
+                    if bimg:
+                        pinned_badges.append(url_for('static', filename=f'badges/{bimg}'))
+                except Exception:
+                    continue
         except Exception:
-            pinned_badge = None
+            pinned_badges = []
 
         posts.append({
             'id': p.id,
@@ -891,7 +894,7 @@ def index():
             'message': p.message,
             'message_html': msg_html,
             'image': p.image,
-            'pinned_badge': pinned_badge,
+            'pinned_badges': pinned_badges,
             'created_at': p.created_at.strftime('%Y-%m-%d %H:%M'),
             'likes': p.likes,
             'liked': liked_flag,

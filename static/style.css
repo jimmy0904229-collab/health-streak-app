@@ -211,5 +211,6 @@ button[type="submit"] {
 .badge-item.dim{opacity:0.35; filter:grayscale(60%)}
 .badge-img{width:80px;height:80px;object-fit:contain}
 .avatar-badge{width:28px;height:28px;border-radius:6px;margin-left:6px;border:2px solid #fff;vertical-align:middle}
+.avatar-badges{display:inline-flex; gap:4px; margin-left:6px; vertical-align:middle}
 .badge-earned{color:green;font-weight:600;margin-top:6px}
 .badge-hint{font-size:12px;color:#666;margin-top:6px}
