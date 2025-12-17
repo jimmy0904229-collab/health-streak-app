@@ -654,30 +654,29 @@ def checkin():
             image = save_uploaded_file(file)
 
         # create post (mentions will be rendered into links when displaying)
-            post = Post(user_id=current_user.id, sport=sport or None, minutes=minutes, message=message or None, image=image, visibility=visibility)
-            db.session.add(post)
-            # update user's streak_days (simple logic: increment if checked-in today; external logic may vary)
-            try:
-                # simplistic: increment streak_days stored on user; caller may set correctly elsewhere
-                current_user.streak_days = (current_user.streak_days or 0) + 1
-            except Exception:
-                pass
-            db.session.commit()
-            # run award checks for this user (streaks and cumulative minutes)
-            try:
-                run_award_checks_on_user(current_user.id)
-            except Exception:
-                pass
-            # notify mentioned users in the post message
-            try:
-                if message:
-                    mentions = re.findall(r'@([A-Za-z0-9_\-]+)', message)
-                    for uname in set(mentions):
-                        u = User.query.filter_by(username=uname).first()
-                        if u and u.id != current_user.id:
-                            create_notification(recipient_id=u.id, actor_id=current_user.id, verb='mention', post_id=post.id, data=message)
-            except Exception:
-                pass
+        post = Post(user_id=current_user.id, sport=sport or None, minutes=minutes, message=message or None, image=image, visibility=visibility)
+        db.session.add(post)
+        # update user's streak_days (simple logic: increment if checked-in today; external logic may vary)
+        try:
+            current_user.streak_days = (current_user.streak_days or 0) + 1
+        except Exception:
+            pass
+        db.session.commit()
+        # run award checks for this user (streaks and cumulative minutes)
+        try:
+            run_award_checks_on_user(current_user.id)
+        except Exception:
+            pass
+        # notify mentioned users in the post message
+        try:
+            if message:
+                mentions = re.findall(r'@([A-Za-z0-9_\-]+)', message)
+                for uname in set(mentions):
+                    u = User.query.filter_by(username=uname).first()
+                    if u and u.id != current_user.id:
+                        create_notification(recipient_id=u.id, actor_id=current_user.id, verb='mention', post_id=post.id, data=message)
+        except Exception:
+            pass
         flash('已新增打卡貼文')
         return redirect(url_for('index'))
 
