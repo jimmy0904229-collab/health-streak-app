@@ -824,6 +824,28 @@ def checkin():
         except Exception:
             new_streak = (current_user.streak_days or 0) + 1
 
+        # ensure the current_user exists in the DB table referenced by the Post FK
+        # If the auth session has a user id that doesn't exist in the DB (dirty/mismatched schema),
+        # create a minimal placeholder user so foreign key constraint won't fail.
+        try:
+            user_in_db = User.query.get(current_user.id)
+            if user_in_db is None:
+                # create a placeholder password hash so the not-null constraint is satisfied
+                placeholder_pw = generate_password_hash(str(uuid.uuid4()))
+                placeholder_username = getattr(current_user, 'username', f'user{current_user.id}')
+                placeholder_display = getattr(current_user, 'display_name', None)
+                placeholder = User(id=current_user.id, username=placeholder_username, password=placeholder_pw, display_name=placeholder_display, avatar=None)
+                db.session.add(placeholder)
+                # flush so the new user exists for the upcoming Post insert
+                try:
+                    db.session.flush()
+                except Exception:
+                    # if flush fails, rollback to avoid leaving the session in a bad state
+                    db.session.rollback()
+        except Exception:
+            # be defensive: if anything goes wrong, continue and let the Post insertion raise a clear error
+            pass
+
         # create post with created_at set (UTC naive)
         # Only include image_blob/image_mime if the Post model actually defines those attributes
         post_kwargs = {
